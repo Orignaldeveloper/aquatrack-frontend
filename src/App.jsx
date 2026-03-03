@@ -1,0 +1,1465 @@
+import React, { useState, useEffect } from "react";
+import {
+  loginAPI,
+  getCustomersAPI, createCustomerAPI, updateCustomerAPI, deleteCustomerAPI,
+  getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI,
+  getInvoicesAPI, generateBillingAPI, markAsPaidAPI
+} from './api.js';
+
+// ─── MOCK DATA ────────────────────────────────────────────────────────────────
+const MOCK_USERS = [
+  { id: "u1", name: "Rajesh Kumar", email: "admin@aquatrack.com", password: "admin123", role: "admin", tenantId: "t1", avatar: "RK" },
+  { id: "u2", name: "Suresh Delivery", email: "delivery@aquatrack.com", password: "del123", role: "delivery", tenantId: "t1", avatar: "SD" },
+  { id: "su", name: "Super Admin", email: "super@aquatrack.com", password: "super123", role: "superadmin", tenantId: null, avatar: "SA" },
+];
+
+const TENANTS = [
+  { id: "t1", name: "AquaPure Distributors", plan: "pro", active: true, customers: 48, revenue: 124500 },
+  { id: "t2", name: "ClearWater Solutions", plan: "basic", active: true, customers: 22, revenue: 56000 },
+  { id: "t3", name: "HydroFlow Delhi", plan: "pro", active: false, customers: 31, revenue: 89200 },
+];
+
+const CUSTOMERS = [
+  { id: "c1", name: "Amit Sharma", mobile: "9876543210", address: "12 MG Road", area: "Koramangala", rate: 30, deposit: 500, active: true, balance: 240, cansOut: 3 },
+  { id: "c2", name: "Priya Singh", mobile: "9876543211", address: "45 HSR Layout", area: "HSR Layout", rate: 35, deposit: 700, active: true, balance: 0, cansOut: 2 },
+  { id: "c3", name: "Vikas Patel", mobile: "9876543212", address: "7 Indiranagar", area: "Indiranagar", rate: 30, deposit: 500, active: true, balance: 120, cansOut: 5 },
+  { id: "c4", name: "Sunita Joshi", mobile: "9876543213", address: "23 BTM Layout", area: "BTM Layout", rate: 25, deposit: 500, active: true, balance: 0, cansOut: 1 },
+  { id: "c5", name: "Ravi Nair", mobile: "9876543214", address: "89 Jayanagar", area: "Jayanagar", rate: 30, deposit: 500, active: false, balance: 360, cansOut: 0 },
+  { id: "c6", name: "Kavitha Reddy", mobile: "9876543215", address: "34 Whitefield", area: "Whitefield", rate: 40, deposit: 1000, active: true, balance: 80, cansOut: 4 },
+];
+
+const DELIVERIES_TODAY = [
+  { id: "d1", customerId: "c1", customerName: "Amit Sharma", delivered: 2, returned: 1, person: "Suresh", revenue: 60, time: "09:30 AM" },
+  { id: "d2", customerId: "c2", customerName: "Priya Singh", delivered: 1, returned: 0, person: "Suresh", revenue: 35, time: "10:15 AM" },
+  { id: "d3", customerId: "c3", customerName: "Vikas Patel", delivered: 3, returned: 2, person: "Suresh", revenue: 90, time: "11:00 AM" },
+  { id: "d4", customerId: "c6", customerName: "Kavitha Reddy", delivered: 2, returned: 1, person: "Suresh", revenue: 80, time: "12:30 PM" },
+];
+
+const MONTHLY_REVENUE = [
+  { month: "Aug", revenue: 92000 }, { month: "Sep", revenue: 98000 }, { month: "Oct", revenue: 105000 },
+  { month: "Nov", revenue: 112000 }, { month: "Dec", revenue: 108000 }, { month: "Jan", revenue: 124500 },
+];
+
+const DAILY_DELIVERIES = [
+  { day: "Mon", count: 42 }, { day: "Tue", count: 38 }, { day: "Wed", count: 45 },
+  { day: "Thu", count: 40 }, { day: "Fri", count: 48 }, { day: "Sat", count: 35 }, { day: "Sun", count: 22 },
+];
+
+// ─── ICONS ───────────────────────────────────────────────────────────────────
+const Icon = ({ name, size = 18, className = "" }) => {
+  const icons = {
+    dashboard: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+    customers: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+    delivery: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+    inventory: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+    billing: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+    reports: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+    tenants: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+    logout: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+    plus: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+    edit: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+    trash: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+    search: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+    bell: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+    sun: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
+    moon: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
+    droplet: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>,
+    check: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
+    x: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+    chevronDown: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="6 9 12 15 18 9"/></svg>,
+    print: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
+    download: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+    menu: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+    alert: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    whatsapp: <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
+  };
+  return icons[name] || null;
+};
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function AquaTrack() {
+  const [user, setUser] = useState(() => {
+  const saved = localStorage.getItem('user');
+  return saved ? JSON.parse(saved) : null;
+});
+  const [darkMode, setDarkMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [customers, setCustomers] = useState(CUSTOMERS);
+  const [deliveries, setDeliveries] = useState(DELIVERIES_TODAY);
+  const [showModal, setShowModal] = useState(null);
+  const [notification, setNotification] = useState(null);
+
+  const notify = (msg, type = "success") => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+  const handleLogout = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  setUser(null);
+  };
+
+  const theme = {
+    bg: darkMode ? "bg-gray-950" : "bg-slate-50",
+    sidebar: darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100",
+    card: darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100",
+    text: darkMode ? "text-gray-100" : "text-gray-800",
+    subtext: darkMode ? "text-gray-400" : "text-gray-500",
+    input: darkMode ? "bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500" : "bg-white border-gray-200 text-gray-800 placeholder-gray-400",
+    hover: darkMode ? "hover:bg-gray-800" : "hover:bg-slate-50",
+    tableRow: darkMode ? "border-gray-800 hover:bg-gray-800/50" : "border-gray-50 hover:bg-blue-50/30",
+    header: darkMode ? "bg-gray-900/80 border-gray-800" : "bg-white/80 border-gray-100",
+  };
+
+  if (!user) return <LoginPage onLogin={setUser} darkMode={darkMode} />;
+
+  const navItems = user.role === "superadmin"
+    ? [{ id: "dashboard", label: "Dashboard", icon: "dashboard" }, { id: "tenants", label: "Tenants", icon: "tenants" }, { id: "reports", label: "Reports", icon: "reports" }]
+    : user.role === "admin"
+    ? [
+        { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+        { id: "customers", label: "Customers", icon: "customers" },
+        { id: "delivery", label: "Daily Delivery", icon: "delivery" },
+        { id: "inventory", label: "Inventory", icon: "inventory" },
+        { id: "billing", label: "Billing", icon: "billing" },
+        { id: "reports", label: "Reports", icon: "reports" },
+      ]
+    : [
+        { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+        { id: "delivery", label: "Daily Delivery", icon: "delivery" },
+      ];
+
+  return (
+    <div className={`flex h-screen overflow-hidden font-sans ${theme.bg} ${theme.text}`}
+      style={{ fontFamily: "'DM Sans', 'Inter', sans-serif" }}>
+      
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-2xl text-white text-sm font-medium flex items-center gap-2 transition-all
+          ${notification.type === "success" ? "bg-emerald-500" : "bg-red-500"}`}>
+          <Icon name={notification.type === "success" ? "check" : "alert"} size={16} />
+          {notification.msg}
+        </div>
+      )}
+
+      {/* Modal Overlay */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+          onClick={() => setShowModal(null)}>
+          <div onClick={e => e.stopPropagation()} className={`w-full max-w-lg rounded-2xl shadow-2xl ${darkMode ? "bg-gray-900" : "bg-white"} p-6`}>
+            {showModal}
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar */}
+      <aside className={`${sidebarOpen ? "w-64" : "w-16"} transition-all duration-300 flex flex-col border-r ${theme.sidebar} shadow-sm z-20 shrink-0`}>
+        {/* Logo */}
+        <div className={`flex items-center gap-3 p-4 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shrink-0">
+            <Icon name="droplet" size={18} className="text-white" />
+          </div>
+          {sidebarOpen && (
+            <div>
+              <div className="font-bold text-sm text-cyan-600">AquaTrack</div>
+              <div className={`text-xs ${theme.subtext}`}>v2.0 Pro</div>
+            </div>
+          )}
+        </div>
+
+        {/* Tenant Badge */}
+        {sidebarOpen && user.role !== "superadmin" && (
+          <div className="mx-3 mt-3 mb-1 px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+            <div className="text-xs font-semibold text-cyan-600">AquaPure Distributors</div>
+            <div className={`text-xs ${theme.subtext}`}>Pro Plan • Active</div>
+          </div>
+        )}
+
+        {/* Nav */}
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto mt-2">
+          {navItems.map(item => (
+            <button key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
+                ${activeTab === item.id
+                  ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-blue-500/20"
+                  : `${theme.subtext} ${theme.hover}`}`}>
+              <Icon name={item.icon} size={18} className="shrink-0" />
+              {sidebarOpen && <span>{item.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* User footer */}
+        <div className={`p-3 border-t ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+          <div className={`flex items-center gap-3 px-2 py-2 rounded-xl ${theme.hover} cursor-pointer`}>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {user.avatar}
+            </div>
+            {sidebarOpen && (
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold truncate">{user.name}</div>
+                <div className={`text-xs ${theme.subtext} capitalize`}>{user.role}</div>
+              </div>
+            )}
+            {sidebarOpen && (
+              <button onClick={handleLogout} className={`${theme.subtext} hover:text-red-500 transition-colors`}>
+                <Icon name="logout" size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className={`flex items-center gap-4 px-6 py-3 border-b backdrop-blur-md ${theme.header} z-10`}>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`${theme.subtext} hover:text-cyan-500 transition-colors`}>
+            <Icon name="menu" size={20} />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-base font-bold capitalize">{activeTab === "dashboard" ? "Dashboard Overview" : activeTab}</h1>
+            <p className={`text-xs ${theme.subtext}`}>Sunday, 1 March 2026</p>
+          </div>
+
+          {/* Search */}
+          <div className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border text-sm ${theme.input} w-48`}>
+            <Icon name="search" size={14} className={theme.subtext} />
+            <input className="bg-transparent outline-none w-full text-xs" placeholder="Search..." />
+          </div>
+
+          <button className={`relative ${theme.subtext} hover:text-cyan-500 transition-colors`}>
+            <Icon name="bell" size={20} />
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">3</span>
+          </button>
+          
+          <button onClick={() => setDarkMode(!darkMode)} className={`${theme.subtext} hover:text-cyan-500 transition-colors`}>
+            <Icon name={darkMode ? "sun" : "moon"} size={18} />
+          </button>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto">
+          {activeTab === "dashboard" && <DashboardPage user={user} theme={theme} darkMode={darkMode} deliveries={deliveries} customers={customers} />}
+          {activeTab === "customers" && <CustomersPage theme={theme} darkMode={darkMode} customers={customers} setCustomers={setCustomers} notify={notify} setShowModal={setShowModal} />}
+          {activeTab === "delivery" && <DeliveryPage theme={theme} darkMode={darkMode} deliveries={deliveries} setDeliveries={setDeliveries} customers={customers} notify={notify} user={user} />}
+          {activeTab === "inventory" && <InventoryPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
+          {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} />}
+          {activeTab === "reports" && <ReportsPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
+          {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+function LoginPage({ onLogin, darkMode }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await loginAPI(email, password);
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        onLogin(data.user);
+      } else {
+        setError(data.message || "Invalid credentials");
+      }
+    } catch (err) {
+      setError("Cannot connect to server. Is backend running?");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-cyan-950 flex items-center justify-center p-4">
+      {/* BG decoration */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0" style={{backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "32px 32px"}} />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        {/* Card */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-2xl shadow-cyan-500/30 mb-4">
+              <Icon name="droplet" size={30} className="text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">AquaTrack</h1>
+            <p className="text-cyan-400/70 text-sm mt-1">Water Can Distribution System</p>
+          </div>
+
+          {/* Demo badges */}
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            {[
+              { label: "Admin", email: "admin@aquatrack.com", pass: "admin123" },
+              { label: "Delivery", email: "delivery@aquatrack.com", pass: "del123" },
+              { label: "Super", email: "super@aquatrack.com", pass: "super123" },
+            ].map(d => (
+              <button key={d.label} onClick={() => { setEmail(d.email); setPassword(d.pass); setError(""); }}
+                className="text-xs py-1.5 px-2 rounded-lg bg-white/5 border border-white/10 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-all">
+                {d.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Email</label>
+              <input value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
+                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/8 transition-all text-sm"
+                placeholder="admin@aquatrack.com" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Password</label>
+              <input type="password" value={password} onChange={e => { setPassword(e.target.value); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 transition-all text-sm"
+                placeholder="••••••••" />
+            </div>
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+            <button onClick={handleLogin} disabled={loading}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all shadow-lg shadow-blue-500/30 disabled:opacity-60">
+              {loading ? "Authenticating..." : "Sign In"}
+            </button>
+          </div>
+
+          <p className="text-center text-xs text-gray-600 mt-6">Multi-tenant SaaS • JWT Auth • Role-based Access</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function DashboardPage({ user, theme, darkMode, deliveries, customers }) {
+  const totalDelivered = deliveries.reduce((s, d) => s + d.delivered, 0);
+  const totalReturned = deliveries.reduce((s, d) => s + d.returned, 0);
+  const todayRevenue = deliveries.reduce((s, d) => s + d.revenue, 0);
+  const activeCustomers = customers.filter(c => c.active).length;
+  const totalDue = customers.reduce((s, c) => s + c.balance, 0);
+  const warehouseStock = 250 - totalDelivered + totalReturned;
+
+  const stats = [
+    { label: "Total Customers", value: customers.length, sub: `${activeCustomers} active`, color: "from-blue-500 to-cyan-500", icon: "customers" },
+    { label: "Today Deliveries", value: totalDelivered, sub: `${deliveries.length} stops`, color: "from-emerald-500 to-teal-500", icon: "delivery" },
+    { label: "Warehouse Stock", value: warehouseStock, sub: "cans available", color: warehouseStock < 50 ? "from-red-500 to-orange-500" : "from-violet-500 to-purple-500", icon: "inventory" },
+    { label: "Today Revenue", value: `₹${todayRevenue}`, sub: "collected today", color: "from-amber-500 to-orange-500", icon: "billing" },
+    { label: "Total Due", value: `₹${totalDue}`, sub: "outstanding", color: "from-rose-500 to-pink-500", icon: "reports" },
+    { label: "Monthly Revenue", value: "₹1.24L", sub: "January 2026", color: "from-cyan-500 to-blue-600", icon: "reports" },
+  ];
+
+  const maxRev = Math.max(...MONTHLY_REVENUE.map(m => m.revenue));
+  const maxDel = Math.max(...DAILY_DELIVERIES.map(d => d.count));
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Low stock alert */}
+      {warehouseStock < 100 && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600">
+          <Icon name="alert" size={18} />
+          <span className="text-sm font-medium">Low Stock Alert: Only {warehouseStock} cans remaining in warehouse</span>
+        </div>
+      )}
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        {stats.map((s, i) => (
+          <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow`}>
+            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-3`}>
+              <Icon name={s.icon} size={15} className="text-white" />
+            </div>
+            <div className="text-xl font-bold">{s.value}</div>
+            <div className={`text-xs font-medium mt-0.5`}>{s.label}</div>
+            <div className={`text-xs ${theme.subtext} mt-0.5`}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Monthly Revenue Chart */}
+        <div className={`lg:col-span-2 ${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-semibold text-sm">Monthly Revenue</h3>
+              <p className={`text-xs ${theme.subtext}`}>Last 6 months</p>
+            </div>
+            <span className="text-xs px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 font-medium">+12.4%</span>
+          </div>
+          <div className="flex items-end gap-3 h-36">
+            {MONTHLY_REVENUE.map((m, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className={`text-xs font-semibold ${theme.subtext}`} style={{fontSize: "10px"}}>
+                  ₹{(m.revenue/1000).toFixed(0)}k
+                </div>
+                <div className="w-full rounded-t-lg bg-gradient-to-t from-cyan-500 to-blue-500 transition-all duration-500 hover:opacity-80 cursor-pointer"
+                  style={{ height: `${(m.revenue / maxRev) * 100}%`, minHeight: 8 }} />
+                <div className={`text-xs ${theme.subtext}`} style={{fontSize: "10px"}}>{m.month}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Daily Delivery Trend */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-semibold text-sm">This Week</h3>
+              <p className={`text-xs ${theme.subtext}`}>Daily deliveries</p>
+            </div>
+          </div>
+          <div className="flex items-end gap-2 h-36">
+            {DAILY_DELIVERIES.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full rounded-t-lg bg-gradient-to-t from-emerald-500 to-teal-400 transition-all"
+                  style={{ height: `${(d.count / maxDel) * 100}%`, minHeight: 4 }} />
+                <div className={`text-xs ${theme.subtext}`} style={{fontSize: "10px"}}>{d.day}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Today's Deliveries */}
+        <div className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? "border-gray-800" : "border-gray-50"}`}>
+            <h3 className="font-semibold text-sm">Today's Deliveries</h3>
+            <span className="text-xs px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-600">{deliveries.length} trips</span>
+          </div>
+          <div className="divide-y divide-opacity-50" style={{divideColor: darkMode ? "#1f2937" : "#f8fafc"}}>
+            {deliveries.map(d => (
+              <div key={d.id} className={`flex items-center gap-3 px-5 py-3 ${theme.hover} transition-colors`}>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {d.customerName[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">{d.customerName}</div>
+                  <div className={`text-xs ${theme.subtext}`}>{d.time}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-bold text-emerald-500">₹{d.revenue}</div>
+                  <div className={`text-xs ${theme.subtext}`}>↑{d.delivered} ↓{d.returned}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Customers */}
+        <div className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? "border-gray-800" : "border-gray-50"}`}>
+            <h3 className="font-semibold text-sm">Top Customers</h3>
+            <span className={`text-xs ${theme.subtext}`}>by volume</span>
+          </div>
+          <div className="p-5 space-y-3">
+            {customers.filter(c => c.active).sort((a, b) => b.cansOut - a.cansOut).slice(0, 5).map((c, i) => (
+              <div key={c.id} className="flex items-center gap-3">
+                <span className={`text-xs font-bold w-5 text-right ${theme.subtext}`}>{i + 1}</span>
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {c.name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">{c.name}</div>
+                  <div className="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all"
+                      style={{ width: `${(c.cansOut / 5) * 100}%` }} />
+                  </div>
+                </div>
+                <span className={`text-xs font-bold shrink-0`}>{c.cansOut} cans</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CUSTOMERS ────────────────────────────────────────────────────────────────
+
+
+
+function CustomersPage({ theme, darkMode, customers, setCustomers, notify, setShowModal }) {
+  const [search, setSearch] = useState("");
+  const [areaFilter, setAreaFilter] = useState("All");
+  const [editCustomer, setEditCustomer] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    const data = await getCustomersAPI();
+    if (data.success) setCustomers(data.customers);
+    setLoading(false);
+  };
+
+  const areas = ["All", ...new Set(customers.map(c => c.area))];
+  const filtered = customers.filter(c =>
+    (areaFilter === "All" || c.area === areaFilter) &&
+    (c.name.toLowerCase().includes(search.toLowerCase()) || c.mobile.includes(search))
+  );
+
+  const handleDelete = async (id) => {
+    await deleteCustomerAPI(id);
+    setCustomers(prev => prev.filter(c => c._id !== id));
+    notify("Customer deleted successfully");
+    setShowModal(null);
+  };
+
+  const handleSave = async (formData) => {
+    if (formData._id) {
+      const data = await updateCustomerAPI(formData._id, formData);
+      if (data.success) {
+        setCustomers(prev => prev.map(c => c._id === formData._id ? data.customer : c));
+        notify("Customer updated!");
+      }
+    } else {
+      const data = await createCustomerAPI(formData);
+      if (data.success) {
+        setCustomers(prev => [data.customer, ...prev]);
+        notify("Customer added!");
+      }
+    }
+    setShowModal(null);
+  };
+
+  const openForm = (customer = null) => {
+    const initial = customer || { name: "", mobile: "", address: "", area: "", rate: 30, deposit: 500, active: true };
+    setShowModal(
+      <CustomerForm initial={initial} onSave={handleSave} onCancel={() => setShowModal(null)} darkMode={darkMode} theme={theme} />
+    );
+  };
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm flex-1 min-w-48 ${theme.input}`}>
+          <Icon name="search" size={15} className={theme.subtext} />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            className="bg-transparent outline-none w-full text-sm" placeholder="Search customers..." />
+        </div>
+        <select value={areaFilter} onChange={e => setAreaFilter(e.target.value)}
+          className={`px-3 py-2 rounded-xl border text-sm ${theme.input} outline-none`}>
+          {areas.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <button onClick={() => openForm()}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90 transition-opacity">
+          <Icon name="plus" size={15} /> Add Customer
+        </button>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="text-center py-10 text-cyan-500 font-medium text-sm">
+          Loading customers...
+        </div>
+      )}
+
+      {/* Table */}
+      {!loading && (
+        <div className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`text-xs font-semibold uppercase tracking-wider ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-800/40" : "border-gray-100 bg-slate-50"}`}>
+                  <th className="text-left px-5 py-3">Customer</th>
+                  <th className="text-left px-4 py-3">Area</th>
+                  <th className="text-left px-4 py-3">Rate</th>
+                  <th className="text-left px-4 py-3">Cans Out</th>
+                  <th className="text-left px-4 py-3">Balance</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-left px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(c => (
+                  <tr key={c._id} className={`border-b ${theme.tableRow} transition-colors`}>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                          {c.name[0]}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-xs">{c.name}</div>
+                          <div className={`text-xs ${theme.subtext}`}>{c.mobile}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{c.area}</td>
+                    <td className="px-4 py-3 text-xs font-semibold">₹{c.rate}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-bold text-blue-500">{c.cansOut}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-bold ${c.balance > 0 ? "text-rose-500" : "text-emerald-500"}`}>
+                        {c.balance > 0 ? `₹${c.balance}` : "Clear"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-500/10 text-gray-500"}`}>
+                        {c.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openForm(c)}
+                          className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors">
+                          <Icon name="edit" size={14} />
+                        </button>
+                        <button onClick={() => setShowModal(
+                          <DeleteConfirm name={c.name} onConfirm={() => handleDelete(c._id)} onCancel={() => setShowModal(null)} darkMode={darkMode} theme={theme} />
+                        )} className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors">
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={`px-5 py-3 border-t ${darkMode ? "border-gray-800" : "border-gray-50"} flex items-center justify-between`}>
+            <span className={`text-xs ${theme.subtext}`}>Showing {filtered.length} of {customers.length} customers</span>
+            <div className="flex gap-1">
+              {["1", "2"].map(p => (
+                <button key={p} className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${p === "1" ? "bg-cyan-500 text-white" : `${theme.subtext} ${theme.hover}`}`}>{p}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomerForm({ initial, onSave, onCancel, darkMode, theme }) {
+  const [form, setForm] = useState(initial);
+  const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const inputCls = `w-full px-3 py-2 rounded-xl border text-sm outline-none focus:border-cyan-500 transition-colors ${theme.input}`;
+  return (
+    <div>
+      <h2 className="text-lg font-bold mb-5">{initial.id ? "Edit Customer" : "Add Customer"}</h2>
+      <div className="grid grid-cols-2 gap-3">
+        {[["name", "Name", "text"], ["mobile", "Mobile", "text"], ["address", "Address", "text"], ["area", "Area", "text"]].map(([k, label, type]) => (
+          <div key={k} className={k === "address" ? "col-span-2" : ""}>
+            <label className={`text-xs ${theme.subtext} mb-1 block`}>{label}</label>
+            <input type={type} value={form[k] || ""} onChange={e => f(k, e.target.value)} className={inputCls} />
+          </div>
+        ))}
+        <div>
+          <label className={`text-xs ${theme.subtext} mb-1 block`}>Rate per Can (₹)</label>
+          <input type="number" value={form.rate} onChange={e => f("rate", +e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className={`text-xs ${theme.subtext} mb-1 block`}>Security Deposit (₹)</label>
+          <input type="number" value={form.deposit} onChange={e => f("deposit", +e.target.value)} className={inputCls} />
+        </div>
+        <div className="col-span-2 flex items-center gap-3">
+          <label className={`text-sm ${theme.subtext}`}>Active</label>
+          <button onClick={() => f("active", !form.active)}
+            className={`w-10 h-5 rounded-full transition-colors ${form.active ? "bg-emerald-500" : "bg-gray-300"} relative`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${form.active ? "left-5.5 left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+      </div>
+      <div className="flex gap-3 mt-6">
+        <button onClick={onCancel} className={`flex-1 py-2.5 rounded-xl border text-sm font-medium ${theme.input} hover:opacity-80 transition-opacity`}>Cancel</button>
+        <button onClick={() => onSave(form)} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+          {initial.id ? "Save Changes" : "Add Customer"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirm({ name, onConfirm, onCancel, theme }) {
+  return (
+    <div className="text-center">
+      <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+        <Icon name="trash" size={24} className="text-red-500" />
+      </div>
+      <h3 className="font-bold text-lg mb-2">Delete Customer?</h3>
+      <p className={`text-sm ${theme.subtext} mb-6`}>This will permanently delete <strong>{name}</strong> and all their data.</p>
+      <div className="flex gap-3">
+        <button onClick={onCancel} className={`flex-1 py-2.5 rounded-xl border text-sm font-medium ${theme.input}`}>Cancel</button>
+        <button onClick={onConfirm} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors">Delete</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── DELIVERY ─────────────────────────────────────────────────────────────────
+function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, notify, user }) {
+  const [form, setForm] = useState({
+    customerId: "", delivered: 1, returned: 0,
+    deliveryPersonName: user?.name || "Suresh",
+    date: new Date().toISOString().split("T")[0]
+  });
+  const [loading, setLoading] = useState(false);
+  const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const selectedCustomer = customers.find(c => c._id === form.customerId);
+  const revenue = selectedCustomer ? form.delivered * selectedCustomer.rate : 0;
+  const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
+
+  useEffect(() => { fetchTodayDeliveries(); }, []);
+
+  const fetchTodayDeliveries = async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const data = await getDeliveriesAPI({ date: today });
+      if (data.success) setDeliveries(data.deliveries);
+    } catch {}
+  };
+
+  const handleAdd = async () => {
+    if (!form.customerId) return notify("Select a customer", "error");
+    setLoading(true);
+    try {
+      const data = await createDeliveryAPI({
+        customerId: form.customerId,
+        delivered: +form.delivered,
+        returned: +form.returned,
+        date: form.date,
+        deliveryPersonName: form.deliveryPersonName
+      });
+      if (data.success) {
+        setDeliveries(prev => [data.delivery, ...prev]);
+        notify(`Delivery logged for ${selectedCustomer.name}`);
+        setForm(p => ({ ...p, customerId: "", delivered: 1, returned: 0 }));
+      } else {
+        notify(data.message || "Failed", "error");
+      }
+    } catch { notify("Server error", "error"); }
+    setLoading(false);
+  };
+
+  const handleDelete = async (id) => {
+    await deleteDeliveryAPI(id);
+    setDeliveries(prev => prev.filter(d => d._id !== id));
+    notify("Delivery removed");
+  };
+
+  const totalRevenue = deliveries.reduce((s, d) => s + d.revenue, 0);
+  const totalDelivered = deliveries.reduce((s, d) => s + d.delivered, 0);
+  const totalReturned = deliveries.reduce((s, d) => s + d.returned, 0);
+
+  return (
+    <div className="p-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Form */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="font-semibold text-sm mb-5">Log Delivery</h3>
+          <div className="space-y-4">
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Date</label>
+              <input type="date" value={form.date} onChange={e => f("date", e.target.value)} className={ic} />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Customer</label>
+              <select value={form.customerId} onChange={e => f("customerId", e.target.value)} className={`${ic} cursor-pointer`}>
+                <option value="">Select Customer...</option>
+                {customers.filter(c => c.active).map(c => (
+                  <option key={c._id} value={c._id}>{c.name} – {c.area}</option>
+                ))}
+              </select>
+            </div>
+            {selectedCustomer && (
+              <div className={`px-3 py-2 rounded-xl ${darkMode ? "bg-cyan-500/10" : "bg-cyan-50"} border border-cyan-500/20`}>
+                <div className="text-xs text-cyan-600 font-medium">
+                  Rate: ₹{selectedCustomer.rate}/can • {selectedCustomer.cansOut || 0} cans currently out
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Delivered</label>
+                <input type="number" min="0" value={form.delivered} onChange={e => f("delivered", +e.target.value)} className={ic} />
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Returned</label>
+                <input type="number" min="0" value={form.returned} onChange={e => f("returned", +e.target.value)} className={ic} />
+              </div>
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Delivery Person</label>
+              <input value={form.deliveryPersonName} onChange={e => f("deliveryPersonName", e.target.value)} className={ic} />
+            </div>
+            {selectedCustomer && (
+              <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <div className="text-xs text-emerald-600 font-semibold">Revenue: ₹{revenue}</div>
+                <div className="text-xs text-emerald-600/70">Net delivered: {form.delivered - form.returned} cans</div>
+              </div>
+            )}
+            <button onClick={handleAdd} disabled={loading}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-60 transition-opacity shadow-md">
+              {loading ? "Logging..." : "Log Delivery"}
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className={`lg:col-span-2 ${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+            <div>
+              <h3 className="font-semibold text-sm">Today's Log</h3>
+              <p className={`text-xs ${theme.subtext}`}>
+                {deliveries.length} deliveries • ↑{totalDelivered} ↓{totalReturned} • ₹{totalRevenue}
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`text-xs font-semibold uppercase ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-800/40" : "border-gray-50 bg-slate-50"}`}>
+                  {["Customer", "Delivered", "Returned", "Person", "Revenue", ""].map(h => (
+                    <th key={h} className="text-left px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {deliveries.map(d => (
+                  <tr key={d._id} className={`border-b ${theme.tableRow}`}>
+                    <td className="px-4 py-3 text-xs font-semibold">{d.customerName || d.customerId?.name}</td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-blue-500">{d.delivered}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-emerald-500">{d.returned}</span></td>
+                    <td className="px-4 py-3 text-xs">{d.deliveryPersonName}</td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-amber-500">₹{d.revenue}</span></td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => handleDelete(d._id)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors">
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {deliveries.length === 0 && (
+                  <tr><td colSpan="6" className={`text-center py-10 text-sm ${theme.subtext}`}>No deliveries logged today</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+function InventoryPage({ theme, darkMode, deliveries }) {
+  const totalCans = 500;
+  const damaged = 12;
+  const delivered = deliveries.reduce((s, d) => s + d.delivered, 0);
+  const returned = deliveries.reduce((s, d) => s + d.returned, 0);
+  const withCustomers = 247 + delivered - returned;
+  const inWarehouse = totalCans - withCustomers - damaged;
+
+  const segments = [
+    { label: "In Warehouse", value: inWarehouse, pct: Math.round(inWarehouse/totalCans*100), color: "from-cyan-500 to-blue-500" },
+    { label: "With Customers", value: withCustomers, pct: Math.round(withCustomers/totalCans*100), color: "from-violet-500 to-purple-500" },
+    { label: "Damaged", value: damaged, pct: Math.round(damaged/totalCans*100), color: "from-rose-500 to-red-500" },
+  ];
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Owned", value: totalCans, color: "from-slate-500 to-gray-600", icon: "inventory" },
+          { label: "In Warehouse", value: inWarehouse, color: "from-cyan-500 to-blue-500", icon: "inventory" },
+          { label: "With Customers", value: withCustomers, color: "from-violet-500 to-purple-500", icon: "customers" },
+          { label: "Damaged", value: damaged, color: "from-rose-500 to-red-500", icon: "alert" },
+        ].map((s, i) => (
+          <div key={i} className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.color} flex items-center justify-center mb-3 shadow-md`}>
+              <Icon name={s.icon} size={18} className="text-white" />
+            </div>
+            <div className="text-3xl font-bold">{s.value}</div>
+            <div className={`text-xs ${theme.subtext} mt-1`}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Visual breakdown */}
+      <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+        <h3 className="font-semibold text-sm mb-5">Can Distribution</h3>
+        {segments.map((s, i) => (
+          <div key={i} className="mb-4">
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className={`font-medium`}>{s.label}</span>
+              <span className={theme.subtext}>{s.value} cans ({s.pct}%)</span>
+            </div>
+            <div className={`h-4 rounded-full ${darkMode ? "bg-gray-800" : "bg-gray-100"} overflow-hidden`}>
+              <div className={`h-full rounded-full bg-gradient-to-r ${s.color} transition-all duration-700`} style={{ width: `${s.pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Adjustments */}
+      <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+        <h3 className="font-semibold text-sm mb-4">Adjust Inventory</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[["Procure New Cans", "blue"], ["Mark as Damaged", "red"], ["Recover from Customer", "emerald"]].map(([label, color]) => (
+            <button key={label} className={`py-3 rounded-xl border-2 text-sm font-semibold transition-all hover:shadow-md
+              ${color === "blue" ? "border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
+                : color === "red" ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BILLING ─────────────────────────────────────────────────────────────────
+// ─── BILLING PAGE ─────────────────────────────────────────────────────────────
+// Replace your existing BillingPage function in App.jsx with this complete version
+
+function BillingPage({ theme, darkMode, notify }) {
+  const [invoices, setInvoices] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [month, year]);
+
+  const fetchInvoices = async () => {
+    setLoading(true);
+    try {
+      const data = await getInvoicesAPI({ month, year });
+      if (data.success) setInvoices(data.invoices);
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const data = await generateBillingAPI(month, year);
+      if (data.success) {
+        notify(`Generated ${data.count} invoices for ${months[month-1]} ${year}!`);
+        fetchInvoices();
+      } else {
+        notify(data.message || "Failed to generate", "error");
+      }
+    } catch {
+      notify("Server error", "error");
+    }
+    setGenerating(false);
+  };
+
+  const handlePay = async (id, totalAmount) => {
+    try {
+      const data = await markAsPaidAPI(id, totalAmount);
+      if (data.success) {
+        setInvoices(prev => prev.map(inv => inv._id === id ? data.invoice : inv));
+        notify("Marked as paid!");
+        setSelected(null);
+      }
+    } catch {
+      notify("Failed to update", "error");
+    }
+  };
+
+  const handlePrint = (inv) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice ${inv.invoiceNo}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            .logo { font-size: 24px; font-weight: bold; color: #0891b2; }
+            .invoice-title { font-size: 28px; font-weight: bold; color: #1e293b; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .info-box { background: #f8fafc; padding: 15px; border-radius: 8px; }
+            .info-box h4 { margin: 0 0 8px; font-size: 12px; color: #64748b; text-transform: uppercase; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background: #f1f5f9; padding: 10px; text-align: left; font-size: 12px; color: #64748b; }
+            td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; }
+            .total-row { background: #0891b2; color: white; }
+            .total-row td { padding: 15px 10px; font-weight: bold; font-size: 16px; }
+            .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
+            .paid { background: #d1fae5; color: #065f46; }
+            .pending { background: #fef3c7; color: #92400e; }
+            .footer { margin-top: 40px; text-align: center; color: #94a3b8; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">💧 AquaPure Distributors</div>
+              <div style="color:#64748b;font-size:13px;margin-top:4px">Water Can Distribution Service</div>
+            </div>
+            <div style="text-align:right">
+              <div class="invoice-title">INVOICE</div>
+              <div style="color:#64748b;font-size:13px">${inv.invoiceNo}</div>
+            </div>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-box">
+              <h4>Bill To</h4>
+              <div style="font-weight:bold">${inv.customerName}</div>
+              <div style="font-size:13px;color:#64748b;margin-top:4px">${inv.customerMobile || ''}</div>
+              <div style="font-size:13px;color:#64748b">${inv.customerAddress || ''}</div>
+            </div>
+            <div class="info-box">
+              <h4>Invoice Details</h4>
+              <div style="font-size:13px">Period: <strong>${months[inv.month-1]} ${inv.year}</strong></div>
+              <div style="font-size:13px;margin-top:4px">Date: <strong>${new Date().toLocaleDateString('en-IN')}</strong></div>
+              <div style="margin-top:8px">
+                <span class="badge ${inv.paid ? 'paid' : 'pending'}">${inv.paid ? '✓ PAID' : '⏳ PENDING'}</span>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th style="text-align:right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>20L Water Can Delivery</td>
+                <td>${inv.totalCansDelivered} cans</td>
+                <td>₹${inv.ratePerCan}/can</td>
+                <td style="text-align:right">₹${inv.subtotal}</td>
+              </tr>
+              <tr>
+                <td>Cans Returned</td>
+                <td>${inv.totalCansReturned} cans</td>
+                <td>-</td>
+                <td style="text-align:right" class="badge">-</td>
+              </tr>
+              ${inv.previousBalance > 0 ? `
+              <tr>
+                <td style="color:#ef4444">Previous Balance</td>
+                <td>-</td>
+                <td>-</td>
+                <td style="text-align:right;color:#ef4444">₹${inv.previousBalance}</td>
+              </tr>` : ''}
+              <tr class="total-row">
+                <td colspan="3">Total Payable</td>
+                <td style="text-align:right">₹${inv.totalAmount}</td>
+              </tr>
+              ${inv.paidAmount > 0 ? `
+              <tr>
+                <td colspan="3" style="color:#10b981">Amount Paid</td>
+                <td style="text-align:right;color:#10b981">₹${inv.paidAmount}</td>
+              </tr>
+              <tr>
+                <td colspan="3" style="font-weight:bold">Balance Due</td>
+                <td style="text-align:right;font-weight:bold">₹${inv.balanceAmount}</td>
+              </tr>` : ''}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <p>Thank you for your business! | AquaPure Distributors | Contact: 9876543210</p>
+            <p>This is a computer generated invoice.</p>
+          </div>
+          <script>window.print(); window.close();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Header Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <select value={month} onChange={e => setMonth(+e.target.value)}
+          className={`px-3 py-2 rounded-xl border text-sm outline-none ${theme.input}`}>
+          {months.map((m, i) => (
+            <option key={i} value={i + 1}>{m} {year}</option>
+          ))}
+        </select>
+        <select value={year} onChange={e => setYear(+e.target.value)}
+          className={`px-3 py-2 rounded-xl border text-sm outline-none ${theme.input}`}>
+          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <button onClick={handleGenerate} disabled={generating}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90 disabled:opacity-60 transition-opacity">
+          <Icon name="billing" size={15} />
+          {generating ? "Generating..." : "Generate Bills"}
+        </button>
+        <button onClick={fetchInvoices}
+          className={`px-4 py-2 rounded-xl border text-sm font-medium ${theme.input} hover:opacity-80`}>
+          Refresh
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      {invoices.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Total Invoices", value: invoices.length, color: "text-blue-500" },
+            { label: "Total Revenue", value: `₹${invoices.reduce((s,i)=>s+i.totalAmount,0)}`, color: "text-cyan-500" },
+            { label: "Collected", value: `₹${invoices.reduce((s,i)=>s+i.paidAmount,0)}`, color: "text-emerald-500" },
+            { label: "Pending", value: `₹${invoices.reduce((s,i)=>s+i.balanceAmount,0)}`, color: "text-rose-500" },
+          ].map((s, i) => (
+            <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
+              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+              <div className={`text-xs ${theme.subtext} mt-1`}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading invoices...</div>}
+
+      {/* Invoice Table */}
+      {!loading && (
+        <div className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`text-xs font-semibold uppercase ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-800/40" : "border-gray-50 bg-slate-50"}`}>
+                  {["Invoice No", "Customer", "Cans", "Amount", "Prev Balance", "Total", "Status", "Actions"].map(h => (
+                    <th key={h} className="text-left px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map(inv => (
+                  <tr key={inv._id} className={`border-b ${theme.tableRow} transition-colors`}>
+                    <td className="px-4 py-3 text-xs font-mono text-cyan-600">{inv.invoiceNo}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-semibold">{inv.customerName}</div>
+                      <div className={`text-xs ${theme.subtext}`}>{inv.customerMobile}</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{inv.totalCansDelivered}</td>
+                    <td className="px-4 py-3 text-xs font-semibold">₹{inv.subtotal}</td>
+                    <td className="px-4 py-3 text-xs text-rose-500">₹{inv.previousBalance}</td>
+                    <td className="px-4 py-3 text-xs font-bold">₹{inv.totalAmount}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium
+                        ${inv.paid ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"}`}>
+                        {inv.paid ? "✓ Paid" : "Pending"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setSelected(inv)}
+                          className="p-1.5 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors" title="View Invoice">
+                          <Icon name="print" size={13} />
+                        </button>
+                        <button onClick={() => handlePrint(inv)}
+                          className="p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-500 transition-colors" title="Print PDF">
+                          <Icon name="download" size={13} />
+                        </button>
+                        {!inv.paid && (
+                          <button onClick={() => handlePay(inv._id, inv.totalAmount)}
+                            className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors" title="Mark Paid">
+                            <Icon name="check" size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {invoices.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className={`text-center py-12 ${theme.subtext}`}>
+                      <div className="text-sm font-medium mb-1">No invoices for {months[month-1]} {year}</div>
+                      <div className="text-xs">Click "Generate Bills" to create invoices from deliveries</div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+          onClick={() => setSelected(null)}>
+          <div onClick={e => e.stopPropagation()}
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                  <Icon name="droplet" size={18} className="text-white" />
+                </div>
+                <div>
+                  <div className="font-bold text-gray-900 text-sm">AquaPure Distributors</div>
+                  <div className="text-xs text-gray-500">Water Can Distribution</div>
+                </div>
+              </div>
+              <button onClick={() => setSelected(null)}>
+                <Icon name="x" size={18} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Invoice Info */}
+            <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Invoice No:</span>
+                <strong className="text-cyan-600 font-mono">{selected.invoiceNo}</strong>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Period:</span>
+                <span className="font-semibold">{months[selected.month-1]} {selected.year}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Customer:</span>
+                <strong>{selected.customerName}</strong>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Mobile:</span>
+                <span>{selected.customerMobile}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Status:</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${selected.paid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                  {selected.paid ? "✓ Paid" : "Pending"}
+                </span>
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <table className="w-full text-xs mb-4">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left pb-2 text-gray-400 font-medium">Description</th>
+                  <th className="text-right pb-2 text-gray-400 font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-700">
+                <tr className="border-b border-gray-50">
+                  <td className="py-2">{selected.totalCansDelivered} cans × ₹{selected.ratePerCan}</td>
+                  <td className="py-2 text-right font-semibold">₹{selected.subtotal}</td>
+                </tr>
+                <tr className="border-b border-gray-50">
+                  <td className="py-2 text-gray-400">Cans Returned: {selected.totalCansReturned}</td>
+                  <td className="py-2 text-right text-gray-400">-</td>
+                </tr>
+                {selected.previousBalance > 0 && (
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2 text-rose-500">Previous Balance</td>
+                    <td className="py-2 text-right text-rose-500">₹{selected.previousBalance}</td>
+                  </tr>
+                )}
+                {selected.paidAmount > 0 && (
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2 text-emerald-600">Amount Paid</td>
+                    <td className="py-2 text-right text-emerald-600">₹{selected.paidAmount}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* Total */}
+            <div className="flex justify-between items-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl px-4 py-3 mb-4">
+              <div>
+                <div className="font-semibold text-sm">Total Payable</div>
+                {selected.balanceAmount < selected.totalAmount && (
+                  <div className="text-xs text-cyan-100">Balance: ₹{selected.balanceAmount}</div>
+                )}
+              </div>
+              <span className="font-bold text-xl">₹{selected.totalAmount}</span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => handlePrint(selected)}
+                className="py-2.5 rounded-xl bg-blue-500/10 text-blue-600 text-xs font-semibold flex items-center justify-center gap-1 hover:bg-blue-500/20 transition-colors">
+                <Icon name="print" size={13} /> Print
+              </button>
+              <button onClick={() => {
+                const msg = `Invoice ${selected.invoiceNo} | ${selected.customerName} | ${months[selected.month-1]} ${selected.year} | Total: ₹${selected.totalAmount}`
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+              }} className="py-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 text-xs font-semibold flex items-center justify-center gap-1 hover:bg-emerald-500/20 transition-colors">
+                <Icon name="whatsapp" size={13} /> WhatsApp
+              </button>
+              {!selected.paid ? (
+                <button onClick={() => handlePay(selected._id, selected.totalAmount)}
+                  className="py-2.5 rounded-xl bg-cyan-500/10 text-cyan-600 text-xs font-semibold flex items-center justify-center gap-1 hover:bg-cyan-500/20 transition-colors">
+                  <Icon name="check" size={13} /> Mark Paid
+                </button>
+              ) : (
+                <button className="py-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 text-xs font-semibold flex items-center justify-center gap-1">
+                  <Icon name="check" size={13} /> Paid ✓
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
+function ReportsPage({ theme, darkMode, deliveries }) {
+  const maxRev = Math.max(...MONTHLY_REVENUE.map(m => m.revenue));
+  return (
+    <div className="p-6 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Revenue trend */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="font-semibold text-sm mb-4">Revenue Trend</h3>
+          <div className="flex items-end gap-3 h-32">
+            {MONTHLY_REVENUE.map((m, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full rounded-t-lg bg-gradient-to-t from-cyan-500 to-blue-400"
+                  style={{ height: `${(m.revenue / maxRev) * 100}%` }} />
+                <div className={`text-xs ${theme.subtext}`} style={{fontSize:"9px"}}>{m.month}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Delivery person */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="font-semibold text-sm mb-4">Delivery Performance</h3>
+          {[{ name: "Suresh Yadav", count: 142, revenue: 5840, rating: 98 }, { name: "Ramesh Kumar", count: 118, revenue: 4920, rating: 94 }, { name: "Mahesh Patel", count: 96, revenue: 4080, rating: 91 }].map((p, i) => (
+            <div key={i} className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold">{p.name[0]}</div>
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-semibold">{p.name}</span>
+                  <span className={theme.subtext}>{p.count} deliveries</span>
+                </div>
+                <div className={`h-2 rounded-full ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                  <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-400" style={{ width: `${p.rating}%` }} />
+                </div>
+              </div>
+              <span className="text-xs font-bold text-violet-500">{p.rating}%</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Inventory summary */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="font-semibold text-sm mb-4">Inventory Summary</h3>
+          {[{ label: "Procured", value: 500, color: "bg-blue-500" }, { label: "Delivered (Jan)", value: 356, color: "bg-cyan-500" }, { label: "Returned", value: 298, color: "bg-emerald-500" }, { label: "Damaged", value: 12, color: "bg-red-500" }].map((s, i) => (
+            <div key={i} className="flex items-center gap-3 mb-3">
+              <div className={`w-2 h-2 rounded-full ${s.color}`} />
+              <div className={`flex-1 text-xs ${theme.text}`}>{s.label}</div>
+              <div className="text-xs font-bold">{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Area-wise */}
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="font-semibold text-sm mb-4">Area-wise Volume</h3>
+          {[{ area: "Koramangala", cans: 85 }, { area: "HSR Layout", cans: 64 }, { area: "Indiranagar", cans: 72 }, { area: "Whitefield", cans: 48 }, { area: "BTM Layout", cans: 39 }].map((a, i) => (
+            <div key={i} className="flex items-center gap-3 mb-2.5">
+              <div className={`text-xs font-medium w-24 shrink-0 ${theme.subtext}`}>{a.area}</div>
+              <div className={`flex-1 h-2 rounded-full ${darkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${(a.cans/85)*100}%` }} />
+              </div>
+              <div className="text-xs font-bold w-8 text-right">{a.cans}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TENANTS (Superadmin) ──────────────────────────────────────────────────────
+function TenantsPage({ theme, darkMode, notify }) {
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold text-base">All Tenants</h2>
+        <button onClick={() => notify("New tenant creation coming soon!")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
+          <Icon name="plus" size={15} /> New Tenant
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {TENANTS.map(t => (
+          <div key={t.id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                <Icon name="droplet" size={20} className="text-white" />
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-400/10 text-gray-500"}`}>
+                {t.active ? "Active" : "Inactive"}
+              </span>
+            </div>
+            <h3 className="font-bold text-sm mb-1">{t.name}</h3>
+            <div className={`text-xs ${theme.subtext} capitalize mb-4`}>{t.plan} plan</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                <div className="text-lg font-bold">{t.customers}</div>
+                <div className={`text-xs ${theme.subtext}`}>Customers</div>
+              </div>
+              <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                <div className="text-lg font-bold">₹{(t.revenue/1000).toFixed(0)}k</div>
+                <div className={`text-xs ${theme.subtext}`}>Revenue</div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors">Manage</button>
+              <button onClick={() => notify(`${t.active ? "Deactivated" : "Activated"} ${t.name}`)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${t.active ? "border-red-500/30 text-red-500 hover:bg-red-500/10" : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+                {t.active ? "Deactivate" : "Activate"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Tenants", value: 3, color: "from-blue-500 to-cyan-500" },
+          { label: "Active", value: 2, color: "from-emerald-500 to-teal-500" },
+          { label: "Total Customers", value: 101, color: "from-violet-500 to-purple-500" },
+          { label: "Platform Revenue", value: "₹2.69L", color: "from-amber-500 to-orange-500" },
+        ].map((s, i) => (
+          <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
+            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-2`}>
+              <Icon name="reports" size={14} className="text-white" />
+            </div>
+            <div className="text-2xl font-bold">{s.value}</div>
+            <div className={`text-xs ${theme.subtext} mt-0.5`}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
