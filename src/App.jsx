@@ -583,6 +583,7 @@ function CustomersPage({ theme, darkMode, customers, setCustomers, notify, setSh
                   <th className="text-left px-4 py-3">Area</th>
                   <th className="text-left px-4 py-3">Rate</th>
                   <th className="text-left px-4 py-3">Cans Out</th>
+                  <th className="text-left px-4 py-3">Cans Returned</th>
                   <th className="text-left px-4 py-3">Balance</th>
                   <th className="text-left px-4 py-3">Status</th>
                   <th className="text-left px-4 py-3">Actions</th>
@@ -604,9 +605,8 @@ function CustomersPage({ theme, darkMode, customers, setCustomers, notify, setSh
                     </td>
                     <td className="px-4 py-3 text-xs">{c.area}</td>
                     <td className="px-4 py-3 text-xs font-semibold">₹{c.rate}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-bold text-blue-500">{c.cansOut}</span>
-                    </td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-blue-500">{c.cansOut || 0}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-emerald-500">{c.cansReturned || 0}</span></td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-bold ${c.balance > 0 ? "text-rose-500" : "text-emerald-500"}`}>
                         {c.balance > 0 ? `₹${c.balance}` : "Clear"}
@@ -713,6 +713,8 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
     date: new Date().toISOString().split("T")[0]
   });
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [personFilter, setPersonFilter] = useState("All");
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const selectedCustomer = customers.find(c => c._id === form.customerId);
   const revenue = selectedCustomer ? form.delivered * selectedCustomer.rate : 0;
@@ -756,10 +758,19 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
     notify("Delivery removed");
   };
 
-  const totalRevenue = deliveries.reduce((s, d) => s + d.revenue, 0);
-  const totalDelivered = deliveries.reduce((s, d) => s + d.delivered, 0);
-  const totalReturned = deliveries.reduce((s, d) => s + d.returned, 0);
+  const persons = ["All", ...new Set(deliveries.map(d => d.deliveryPersonName).filter(Boolean))];
 
+const filtered = deliveries.filter(d => {
+  const name = (d.customerName || d.customerId?.name || "").toLowerCase();
+  const person = (d.deliveryPersonName || "").toLowerCase();
+  const matchSearch = search === "" || name.includes(search.toLowerCase()) || person.includes(search.toLowerCase());
+  const matchPerson = personFilter === "All" || d.deliveryPersonName === personFilter;
+  return matchSearch && matchPerson;
+});
+
+const totalRevenue = filtered.reduce((s, d) => s + d.revenue, 0);
+const totalDelivered = filtered.reduce((s, d) => s + d.delivered, 0);
+const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
   return (
     <div className="p-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -816,14 +827,38 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
 
         {/* Table */}
         <div className={`lg:col-span-2 ${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
-          <div className={`flex items-center justify-between px-5 py-4 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
-            <div>
-              <h3 className="font-semibold text-sm">Today's Log</h3>
-              <p className={`text-xs ${theme.subtext}`}>
-                {deliveries.length} deliveries • ↑{totalDelivered} ↓{totalReturned} • ₹{totalRevenue}
-              </p>
-            </div>
-          </div>
+         <div className={`px-5 py-4 border-b ${darkMode ? "border-gray-800" : "border-gray-100"} space-y-3`}>
+  <div className="flex items-center justify-between">
+    <div>
+      <h3 className="font-semibold text-sm">Today's Log</h3>
+      <p className={`text-xs ${theme.subtext}`}>
+        {filtered.length} of {deliveries.length} deliveries • ↑{totalDelivered} ↓{totalReturned} • ₹{totalRevenue}
+      </p>
+    </div>
+  </div>
+  <div className="flex gap-2">
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm flex-1 ${theme.input}`}>
+      <Icon name="search" size={14} className={theme.subtext} />
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="bg-transparent outline-none w-full text-xs"
+        placeholder="Search customer..."
+      />
+      {search && (
+        <button onClick={() => setSearch("")} className={theme.subtext}>
+          <Icon name="x" size={13} />
+        </button>
+      )}
+         </div>
+             <select
+         value={personFilter}
+         onChange={e => setPersonFilter(e.target.value)}
+         className={`px-3 py-2 rounded-xl border text-xs outline-none ${theme.input}`}>
+         {persons.map(p => <option key={p}>{p}</option>)}
+          </select>
+         </div>
+       </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -849,9 +884,11 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
                     </td>
                   </tr>
                 ))}
-                {deliveries.length === 0 && (
-                  <tr><td colSpan="6" className={`text-center py-10 text-sm ${theme.subtext}`}>No deliveries logged today</td></tr>
-                )}
+                {filtered.length === 0 && (
+                 <tr><td colSpan="6" className={`text-center py-10 text-sm ${theme.subtext}`}>
+                {deliveries.length === 0 ? "No deliveries logged today" : "No results found"}
+               </td></tr>
+               )}
               </tbody>
             </table>
           </div>
@@ -1149,7 +1186,7 @@ function BillingPage({ theme, darkMode, notify }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className={`text-xs font-semibold uppercase ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-800/40" : "border-gray-50 bg-slate-50"}`}>
-                  {["Invoice No", "Customer", "Cans", "Amount", "Prev Balance", "Total", "Status", "Actions"].map(h => (
+                 {["Invoice No", "Customer", "Cans Delivered", "Cans Returned", "Amount", "Prev Balance", "Total", "Status", "Actions"].map(h => (
                     <th key={h} className="text-left px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -1163,6 +1200,7 @@ function BillingPage({ theme, darkMode, notify }) {
                       <div className={`text-xs ${theme.subtext}`}>{inv.customerMobile}</div>
                     </td>
                     <td className="px-4 py-3 text-xs">{inv.totalCansDelivered}</td>
+                    <td className="px-4 py-3 text-xs"><span className="text-xs font-bold text-emerald-500">{inv.totalCansReturned}</span></td>
                     <td className="px-4 py-3 text-xs font-semibold">₹{inv.subtotal}</td>
                     <td className="px-4 py-3 text-xs text-rose-500">₹{inv.previousBalance}</td>
                     <td className="px-4 py-3 text-xs font-bold">₹{inv.totalAmount}</td>
@@ -1194,7 +1232,7 @@ function BillingPage({ theme, darkMode, notify }) {
                 ))}
                 {invoices.length === 0 && (
                   <tr>
-                    <td colSpan="8" className={`text-center py-12 ${theme.subtext}`}>
+                    <td colSpan="9" className={`text-center py-12 ${theme.subtext}`}>
                       <div className="text-sm font-medium mb-1">No invoices for {months[month-1]} {year}</div>
                       <div className="text-xs">Click "Generate Bills" to create invoices from deliveries</div>
                     </td>
