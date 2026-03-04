@@ -245,7 +245,7 @@ export default function AquaTrack() {
           {activeTab === "dashboard" && <DashboardPage user={user} theme={theme} darkMode={darkMode} deliveries={deliveries} customers={customers} />}
           {activeTab === "customers" && <CustomersPage theme={theme} darkMode={darkMode} customers={customers} setCustomers={setCustomers} notify={notify} setShowModal={setShowModal} />}
           {activeTab === "delivery" && <DeliveryPage theme={theme} darkMode={darkMode} deliveries={deliveries} setDeliveries={setDeliveries} customers={customers} notify={notify} user={user} />}
-          {activeTab === "inventory" && <InventoryPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
+          {activeTab === "inventory" && <InventoryPage theme={theme} darkMode={darkMode} customers={customers} notify={notify} />}
           {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} />}
           {activeTab === "reports" && <ReportsPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
           {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} />}
@@ -899,70 +899,337 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
 }
 
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
-function InventoryPage({ theme, darkMode, deliveries }) {
-  const totalCans = 500;
-  const damaged = 12;
-  const delivered = deliveries.reduce((s, d) => s + d.delivered, 0);
-  const returned = deliveries.reduce((s, d) => s + d.returned, 0);
-  const withCustomers = 247 + delivered - returned;
-  const inWarehouse = totalCans - withCustomers - damaged;
+function InventoryPage({ theme, darkMode, customers, notify }) {
+  const [deliveries, setDeliveries] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("All");
+  const [personFilter, setPersonFilter] = useState("All");
+  const now = new Date();
+  const [viewMode, setViewMode] = useState("day"); // day | month
+  const [selectedDate, setSelectedDate] = useState(now.toISOString().split("T")[0]);
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
-  const segments = [
-    { label: "In Warehouse", value: inWarehouse, pct: Math.round(inWarehouse/totalCans*100), color: "from-cyan-500 to-blue-500" },
-    { label: "With Customers", value: withCustomers, pct: Math.round(withCustomers/totalCans*100), color: "from-violet-500 to-purple-500" },
-    { label: "Damaged", value: damaged, pct: Math.round(damaged/totalCans*100), color: "from-rose-500 to-red-500" },
-  ];
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const exportToExcel = () => {
+  if (filtered.length === 0) return notify("No data to export", "error");
+
+  const exportData = filtered.map((d, i) => ({
+    "#": i + 1,
+    "Date": new Date(d.date).toLocaleDateString('en-IN'),
+    "Customer Name": d.customerName || d.customerId?.name || "",
+    "Delivered": d.delivered,
+    "Returned": d.returned,
+    "Net Delivered": d.netDelivered,
+    "Delivery Person": d.deliveryPersonName || "",
+    "Rate per Can": d.ratePerCan || "",
+    "Revenue (₹)": d.revenue,
+  }));
+
+  // Summary row at bottom
+  exportData.push({
+    "#": "",
+    "Date": "",
+    "Customer Name": "TOTAL",
+    "Delivered": totalDelivered,
+    "Returned": totalReturned,
+    "Net Delivered": totalNet,
+    "Delivery Person": "",
+    "Rate per Can": "",
+    "Revenue (₹)": totalRevenue,
+  });
+
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Deliveries");
+
+  // File name based on current filter
+  const label = viewMode === "day"
+    ? selectedDate
+    : `${months[selectedMonth - 1]}-${selectedYear}`;
+
+  XLSX.writeFile(wb, `AquaTrack_Deliveries_${label}.xlsx`);
+  notify("Excel exported successfully!");
+};
+
+  useEffect(() => {
+    fetchDeliveries();
+  }, [viewMode, selectedDate, selectedMonth, selectedYear]);
+
+  const fetchDeliveries = async () => {
+    setLoading(true);
+    try {
+      let params = {};
+      if (viewMode === "day") {
+        params.date = selectedDate;
+      } else {
+        const start = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split("T")[0];
+        const end = new Date(selectedYear, selectedMonth, 0).toISOString().split("T")[0];
+        params.dateRange = `${start},${end}`;
+      }
+      const data = await getDeliveriesAPI(params);
+      if (data.success) setDeliveries(data.deliveries);
+    } catch {}
+    setLoading(false);
+  };
+
+  // Unique delivery persons
+  const persons = ["All", ...new Set(deliveries.map(d => d.deliveryPersonName).filter(Boolean))];
+
+  // Apply filters
+  const filtered = deliveries.filter(d => {
+    const name = (d.customerName || d.customerId?.name || "").toLowerCase();
+    const matchSearch = search === "" || name.includes(search.toLowerCase());
+    const matchCustomer = customerFilter === "All" || (d.customerName || d.customerId?.name) === customerFilter;
+    const matchPerson = personFilter === "All" || d.deliveryPersonName === personFilter;
+    return matchSearch && matchCustomer && matchPerson;
+  });
+
+  // Summary stats
+  const totalDelivered = filtered.reduce((s, d) => s + d.delivered, 0);
+  const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
+  const totalRevenue = filtered.reduce((s, d) => s + d.revenue, 0);
+  const totalNet = totalDelivered - totalReturned;
+
+  // Group by date for month view
+  const groupedByDate = filtered.reduce((acc, d) => {
+    const date = new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(d);
+    return acc;
+  }, {});
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total Owned", value: totalCans, color: "from-slate-500 to-gray-600", icon: "inventory" },
-          { label: "In Warehouse", value: inWarehouse, color: "from-cyan-500 to-blue-500", icon: "inventory" },
-          { label: "With Customers", value: withCustomers, color: "from-violet-500 to-purple-500", icon: "customers" },
-          { label: "Damaged", value: damaged, color: "from-rose-500 to-red-500", icon: "alert" },
-        ].map((s, i) => (
-          <div key={i} className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.color} flex items-center justify-center mb-3 shadow-md`}>
-              <Icon name={s.icon} size={18} className="text-white" />
-            </div>
-            <div className="text-3xl font-bold">{s.value}</div>
-            <div className={`text-xs ${theme.subtext} mt-1`}>{s.label}</div>
-          </div>
-        ))}
-      </div>
+    <div className="p-6 space-y-5">
 
-      {/* Visual breakdown */}
-      <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
-        <h3 className="font-semibold text-sm mb-5">Can Distribution</h3>
-        {segments.map((s, i) => (
-          <div key={i} className="mb-4">
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className={`font-medium`}>{s.label}</span>
-              <span className={theme.subtext}>{s.value} cans ({s.pct}%)</span>
-            </div>
-            <div className={`h-4 rounded-full ${darkMode ? "bg-gray-800" : "bg-gray-100"} overflow-hidden`}>
-              <div className={`h-full rounded-full bg-gradient-to-r ${s.color} transition-all duration-700`} style={{ width: `${s.pct}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Header Controls */}
+      <div className="flex flex-wrap items-center gap-3">
 
-      {/* Adjustments */}
-      <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
-        <h3 className="font-semibold text-sm mb-4">Adjust Inventory</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[["Procure New Cans", "blue"], ["Mark as Damaged", "red"], ["Recover from Customer", "emerald"]].map(([label, color]) => (
-            <button key={label} className={`py-3 rounded-xl border-2 text-sm font-semibold transition-all hover:shadow-md
-              ${color === "blue" ? "border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
-                : color === "red" ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
-                : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
-              {label}
+        {/* Day / Month Toggle */}
+        <div className={`flex rounded-xl border overflow-hidden ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+          {["day", "month"].map(mode => (
+            <button key={mode} onClick={() => setViewMode(mode)}
+              className={`px-4 py-2 text-xs font-semibold capitalize transition-colors
+                ${viewMode === mode
+                  ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                  : `${theme.subtext} ${theme.hover}`}`}>
+              {mode === "day" ? "Day View" : "Month View"}
             </button>
           ))}
         </div>
+
+        {/* Date Picker - Day Mode */}
+        {viewMode === "day" && (
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            className={`px-3 py-2 rounded-xl border text-sm outline-none ${theme.input}`}
+          />
+        )}
+
+        {/* Month + Year Picker - Month Mode */}
+        {viewMode === "month" && (
+          <>
+            <select value={selectedMonth} onChange={e => setSelectedMonth(+e.target.value)}
+              className={`px-3 py-2 rounded-xl border text-sm outline-none ${theme.input}`}>
+              {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+            <select value={selectedYear} onChange={e => setSelectedYear(+e.target.value)}
+              className={`px-3 py-2 rounded-xl border text-sm outline-none ${theme.input}`}>
+              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </>
+        )}
+
+        
+        {/* Refresh */}
+        <button onClick={fetchDeliveries}
+        className={`px-4 py-2 rounded-xl border text-xs font-medium ${theme.input} hover:opacity-80`}>
+        Refresh
+         </button>
+
+      {/* Export Excel */}
+          <button onClick={exportToExcel}
+           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-semibold shadow-md hover:opacity-90 transition-opacity">
+           <Icon name="download" size={14} />
+            Export Excel
+          </button>
       </div>
+
+      {/* Search + Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm flex-1 min-w-48 ${theme.input}`}>
+          <Icon name="search" size={14} className={theme.subtext} />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            className="bg-transparent outline-none w-full text-xs"
+            placeholder="Search customer..." />
+          {search && (
+            <button onClick={() => setSearch("")} className={theme.subtext}>
+              <Icon name="x" size={13} />
+            </button>
+          )}
+        </div>
+        <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)}
+          className={`px-3 py-2 rounded-xl border text-xs outline-none ${theme.input}`}>
+          <option value="All">All Customers</option>
+          {customers.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+        </select>
+        <select value={personFilter} onChange={e => setPersonFilter(e.target.value)}
+          className={`px-3 py-2 rounded-xl border text-xs outline-none ${theme.input}`}>
+          {persons.map(p => <option key={p}>{p === "All" ? "All Persons" : p}</option>)}
+        </select>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Deliveries", value: filtered.length, color: "from-blue-500 to-cyan-500" },
+          { label: "Cans Delivered", value: totalDelivered, color: "from-emerald-500 to-teal-500" },
+          { label: "Cans Returned", value: totalReturned, color: "from-violet-500 to-purple-500" },
+          { label: "Total Revenue", value: `₹${totalRevenue}`, color: "from-amber-500 to-orange-500" },
+        ].map((s, i) => (
+          <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
+            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-2`}>
+              <Icon name="delivery" size={14} className="text-white" />
+            </div>
+            <div className="text-2xl font-bold">{s.value}</div>
+            <div className={`text-xs ${theme.subtext} mt-0.5`}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Loading */}
+      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading deliveries...</div>}
+
+      {/* DAY VIEW TABLE */}
+      {!loading && viewMode === "day" && (
+        <div className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`}>
+          <div className={`px-5 py-3 border-b ${darkMode ? "border-gray-800" : "border-gray-100"}`}>
+            <span className="text-xs font-semibold">
+              {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+            </span>
+            <span className={`ml-2 text-xs ${theme.subtext}`}>— {filtered.length} records</span>
+          </div>
+          <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10">
+               <tr className={`text-xs font-semibold uppercase ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-900" : "border-gray-100 bg-slate-50"}`}>
+                {["#", "Customer", "Delivered", "Returned", "Net", "Person", "Revenue"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>
+                   ))}
+                </tr>
+               </thead>
+              <tbody>
+                {filtered.map((d, i) => (
+                  <tr key={d._id} className={`border-b ${theme.tableRow}`}>
+                    <td className={`px-4 py-3 text-xs ${theme.subtext}`}>{i + 1}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                          {(d.customerName || "?")[0]}
+                        </div>
+                        <span className="text-xs font-semibold">{d.customerName || d.customerId?.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-blue-500">{d.delivered}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-emerald-500">{d.returned}</span></td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-violet-500">{d.netDelivered}</span></td>
+                    <td className="px-4 py-3 text-xs">{d.deliveryPersonName}</td>
+                    <td className="px-4 py-3"><span className="text-xs font-bold text-amber-500">₹{d.revenue}</span></td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan="7" className={`text-center py-10 text-sm ${theme.subtext}`}>
+                    No deliveries found for this date
+                  </td></tr>
+                )}
+              </tbody>
+              {filtered.length > 0 && (
+                <tfoot>
+                  <tr className={`${darkMode ? "bg-gray-800/60" : "bg-slate-50"} font-bold text-xs`}>
+                    <td className="px-4 py-3" colSpan="2">Total</td>
+                    <td className="px-4 py-3 text-blue-500">{totalDelivered}</td>
+                    <td className="px-4 py-3 text-emerald-500">{totalReturned}</td>
+                    <td className="px-4 py-3 text-violet-500">{totalNet}</td>
+                    <td className="px-4 py-3"></td>
+                    <td className="px-4 py-3 text-amber-500">₹{totalRevenue}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MONTH VIEW — grouped by date */}
+      {!loading && viewMode === "month" && (
+        <div className="space-y-4">
+          {Object.keys(groupedByDate).length === 0 && (
+            <div className={`${theme.card} border rounded-2xl p-10 text-center text-sm ${theme.subtext}`}>
+              No deliveries found for {months[selectedMonth - 1]} {selectedYear}
+            </div>
+          )}
+          {Object.entries(groupedByDate).map(([date, dayDeliveries]) => {
+            const dayRevenue = dayDeliveries.reduce((s, d) => s + d.revenue, 0);
+            const dayDelivered = dayDeliveries.reduce((s, d) => s + d.delivered, 0);
+            const dayReturned = dayDeliveries.reduce((s, d) => s + d.returned, 0);
+            return (
+              <div key={date} className={`${theme.card} border rounded-2xl shadow-sm overflow-hidden`} style={{contain: "layout"}}>
+                {/* Date Header */}
+                <div className={`flex items-center justify-between px-5 py-3 border-b ${darkMode ? "border-gray-800 bg-gray-800/40" : "border-gray-50 bg-slate-50"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold">
+                      {new Date(dayDeliveries[0].date).getDate()}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold">{date}</div>
+                      <div className={`text-xs ${theme.subtext}`}>{dayDeliveries.length} deliveries</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-blue-500 font-semibold">↑{dayDelivered}</span>
+                    <span className="text-emerald-500 font-semibold">↓{dayReturned}</span>
+                    <span className="text-amber-500 font-bold">₹{dayRevenue}</span>
+                  </div>
+                </div>
+                {/* Day Deliveries */}
+                <div className="overflow-x-auto">
+  <table className="w-full text-sm">
+    <thead className="sticky top-0 z-10">
+      <tr className={`text-xs font-semibold uppercase ${theme.subtext} border-b ${darkMode ? "border-gray-800 bg-gray-900" : "border-gray-100 bg-slate-50"}`}>
+        {["#", "Customer", "Delivered", "Returned", "Person", "Revenue"].map(h => (
+          <th key={h} className="text-left px-4 py-2 whitespace-nowrap">{h}</th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+                      {dayDeliveries.map((d, i) => (
+                        <tr key={d._id} className={`border-b ${theme.tableRow}`}>
+                          <td className={`px-4 py-2.5 text-xs ${theme.subtext} w-8`}>{i + 1}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                {(d.customerName || "?")[0]}
+                              </div>
+                              <span className="text-xs font-semibold">{d.customerName || d.customerId?.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5"><span className="text-xs font-bold text-blue-500">↑{d.delivered}</span></td>
+                          <td className="px-4 py-2.5"><span className="text-xs font-bold text-emerald-500">↓{d.returned}</span></td>
+                          <td className="px-4 py-2.5 text-xs">{d.deliveryPersonName}</td>
+                          <td className="px-4 py-2.5"><span className="text-xs font-bold text-amber-500">₹{d.revenue}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
