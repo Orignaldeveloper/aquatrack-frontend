@@ -3,7 +3,8 @@ import {
   loginAPI,
   getCustomersAPI, createCustomerAPI, updateCustomerAPI, deleteCustomerAPI,
   getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI,
-  getInvoicesAPI, generateBillingAPI, markAsPaidAPI
+  getInvoicesAPI, generateBillingAPI, markAsPaidAPI,
+  getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI
 } from './api.js';
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -112,7 +113,7 @@ export default function AquaTrack() {
     header: darkMode ? "bg-gray-900/80 border-gray-800" : "bg-white/80 border-gray-100",
   };
 
-  if (!user) return <LoginPage onLogin={setUser} darkMode={darkMode} />;
+  if (!user) return <LoginPage onLogin={(u) => { setUser(u); setActiveTab(u.role === 'delivery' ? 'delivery' : 'dashboard'); }} darkMode={darkMode} />;
 
   const navItems = user.role === "superadmin"
     ? [{ id: "dashboard", label: "Dashboard", icon: "dashboard" }, { id: "tenants", label: "Tenants", icon: "tenants" }, { id: "reports", label: "Reports", icon: "reports" }]
@@ -124,9 +125,9 @@ export default function AquaTrack() {
         { id: "inventory", label: "Inventory", icon: "inventory" },
         { id: "billing", label: "Billing", icon: "billing" },
         { id: "reports", label: "Reports", icon: "reports" },
+        { id: "team", label: "Team", icon: "customers" },
       ]
     : [
-        { id: "dashboard", label: "Dashboard", icon: "dashboard" },
         { id: "delivery", label: "Daily Delivery", icon: "delivery" },
       ];
 
@@ -249,6 +250,7 @@ export default function AquaTrack() {
           {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} />}
           {activeTab === "reports" && <ReportsPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
           {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} />}
+          {activeTab === "team" && <TeamPage theme={theme} darkMode={darkMode} notify={notify} user={user} />}
         </main>
       </div>
     </div>
@@ -706,13 +708,19 @@ function DeleteConfirm({ name, onConfirm, onCancel, theme }) {
 }
 
 // ─── DELIVERY ─────────────────────────────────────────────────────────────────
+
 function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, notify, user }) {
+  const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
-    customerId: "", delivered: 1, returned: 0,
-    deliveryPersonName: user?.name || "Suresh",
-    date: new Date().toISOString().split("T")[0]
-  });
+  customerId: '',
+  delivered: '',
+  returned: '',
+  deliveryPersonName: user?.name || '',
+  date: today
+});
+ 
   const [loading, setLoading] = useState(false);
+  const [deliveryPersons, setDeliveryPersons] = useState([]);
   const [search, setSearch] = useState("");
   const [personFilter, setPersonFilter] = useState("All");
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -720,7 +728,12 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
   const revenue = selectedCustomer ? form.delivered * selectedCustomer.rate : 0;
   const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
 
-  useEffect(() => { fetchTodayDeliveries(); }, []);
+  useEffect(() => {
+  fetchTodayDeliveries();
+  getDeliveryPersonsAPI().then(data => {
+    if (data.success) setDeliveryPersons(data.persons);
+  }).catch(() => {});
+}, []);
 
   const fetchTodayDeliveries = async () => {
     try {
@@ -810,7 +823,18 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
             </div>
             <div>
               <label className={`text-xs ${theme.subtext} mb-1 block`}>Delivery Person</label>
-              <input value={form.deliveryPersonName} onChange={e => f("deliveryPersonName", e.target.value)} className={ic} />
+                 {user?.role === 'delivery' ? (
+                   <input value={user.name} readOnly className={`${ic} opacity-60 cursor-not-allowed`} />
+              ) : (
+               <select value={form.deliveryPersonName} onChange={e => f("deliveryPersonName", e.target.value)}
+               className={`${ic} cursor-pointer`}>
+               <option value="">Select Person...</option>
+              {deliveryPersons.map(p => (
+            <option key={p._id} value={p.name}>{p.name} — {p.area || 'No area'}</option>
+          ))}
+    <option value="Other">Other</option>
+     </select>
+          )}
             </div>
             {selectedCustomer && (
               <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
@@ -869,7 +893,7 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
                 </tr>
               </thead>
               <tbody>
-                {deliveries.map(d => (
+                {filtered.map(d => (
                   <tr key={d._id} className={`border-b ${theme.tableRow}`}>
                     <td className="px-4 py-3 text-xs font-semibold">{d.customerName || d.customerId?.name}</td>
                     <td className="px-4 py-3"><span className="text-xs font-bold text-blue-500">{d.delivered}</span></td>
@@ -1632,6 +1656,196 @@ function BillingPage({ theme, darkMode, notify }) {
   );
 }
 
+// ─── TEAM PAGE ────────────────────────────────────────────────────────────────
+function TeamPage({ theme, darkMode, notify, user }) {
+  const [persons, setPersons] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editPerson, setEditPerson] = useState(null);
+  const [form, setForm] = useState({ name: '', email: '', password: '', mobile: '', area: '' });
+
+  const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
+
+  useEffect(() => { fetchPersons(); }, []);
+
+  const fetchPersons = async () => {
+    setLoading(true);
+    try {
+      const data = await getDeliveryPersonsAPI();
+      if (data.success) setPersons(data.persons);
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleAdd = async () => {
+    if (!form.name || !form.email || !form.password)
+      return notify("Name, email and password are required", "error");
+    try {
+      const data = await addDeliveryPersonAPI(form);
+      if (data.success) {
+        setPersons(prev => [data.user, ...prev]);
+        notify("Delivery person added!");
+        setShowForm(false);
+        setForm({ name: '', email: '', password: '', mobile: '', area: '' });
+      } else {
+        notify(data.message || "Failed to add", "error");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const handleUpdate = async () => {
+    try {
+      const data = await updateDeliveryPersonAPI(editPerson._id, {
+        name: form.name, mobile: form.mobile, area: form.area, active: form.active
+      });
+      if (data.success) {
+        setPersons(prev => prev.map(p => p._id === editPerson._id ? data.person : p));
+        notify("Updated successfully!");
+        setEditPerson(null);
+        setForm({ name: '', email: '', password: '', mobile: '', area: '' });
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      const data = await deleteDeliveryPersonAPI(id);
+      if (data.success) {
+        setPersons(prev => prev.filter(p => p._id !== id));
+        notify("Deleted successfully!");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const openEdit = (person) => {
+    setEditPerson(person);
+    setForm({ name: person.name, mobile: person.mobile || '', area: person.area || '', active: person.active });
+    setShowForm(false);
+  };
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold">Delivery Team</h2>
+          <p className={`text-xs ${theme.subtext}`}>{persons.length} delivery persons</p>
+        </div>
+        <button onClick={() => { setShowForm(!showForm); setEditPerson(null); setForm({ name: '', email: '', password: '', mobile: '', area: '' }); }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
+          <Icon name="plus" size={15} /> Add Person
+        </button>
+      </div>
+
+      {showForm && (
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="text-sm font-semibold mb-4">Add Delivery Person</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Full Name *</label>
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={ic} placeholder="Enter name" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Mobile Number</label>
+              <input value={form.mobile} onChange={e => setForm(p => ({ ...p, mobile: e.target.value }))} className={ic} placeholder="Enter mobile" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Email *</label>
+              <input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className={ic} placeholder="Enter email" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Password *</label>
+              <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} className={ic} placeholder="Min 6 characters" />
+            </div>
+            <div className="col-span-2">
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Area Assigned</label>
+              <input value={form.area} onChange={e => setForm(p => ({ ...p, area: e.target.value }))} className={ic} placeholder="e.g. Koramangala, Indiranagar" />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setShowForm(false)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+            <button onClick={handleAdd} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Add Person</button>
+          </div>
+        </div>
+      )}
+
+      {editPerson && (
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm border-cyan-500/30`}>
+          <h3 className="text-sm font-semibold mb-4">Edit — {editPerson.name}</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Full Name</label>
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={ic} />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Mobile Number</label>
+              <input value={form.mobile} onChange={e => setForm(p => ({ ...p, mobile: e.target.value }))} className={ic} />
+            </div>
+            <div className="col-span-2">
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Area Assigned</label>
+              <input value={form.area} onChange={e => setForm(p => ({ ...p, area: e.target.value }))} className={ic} />
+            </div>
+            <div className="col-span-2 flex items-center gap-3">
+              <label className={`text-sm ${theme.subtext}`}>Active</label>
+              <button onClick={() => setForm(p => ({ ...p, active: !p.active }))}
+                className={`w-10 h-5 rounded-full relative transition-colors ${form.active ? "bg-emerald-500" : "bg-gray-300"}`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${form.active ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setEditPerson(null)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+            <button onClick={handleUpdate} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Save Changes</button>
+          </div>
+        </div>
+      )}
+
+      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading team...</div>}
+
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {persons.map(p => (
+            <div key={p._id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-lg font-bold shrink-0">
+                    {p.name[0]}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm">{p.name}</div>
+                    <div className={`text-xs ${theme.subtext}`}>{p.email}</div>
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-500/10 text-gray-500"}`}>
+                  {p.active ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <div className="space-y-2 mb-4">
+                {p.mobile && <div className="flex items-center gap-2"><span className={`text-xs ${theme.subtext}`}>📱</span><span className="text-xs">{p.mobile}</span></div>}
+                {p.area && <div className="flex items-center gap-2"><span className={`text-xs ${theme.subtext}`}>📍</span><span className="text-xs">{p.area}</span></div>}
+                <div className="flex items-center gap-2"><span className={`text-xs ${theme.subtext}`}>🎭</span><span className="text-xs capitalize">{p.role}</span></div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openEdit(p)} className="flex-1 py-2 rounded-xl bg-blue-500/10 text-blue-600 text-xs font-semibold flex items-center justify-center gap-1 hover:bg-blue-500/20 transition-colors">
+                  <Icon name="edit" size={13} /> Edit
+                </button>
+                <button onClick={() => handleDelete(p._id)} className="flex-1 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-semibold flex items-center justify-center gap-1 hover:bg-red-500/20 transition-colors">
+                  <Icon name="trash" size={13} /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {persons.length === 0 && (
+            <div className={`col-span-3 text-center py-16 ${theme.subtext}`}>
+              <div className="text-4xl mb-3">👥</div>
+              <div className="text-sm font-medium mb-1">No delivery persons yet</div>
+              <div className="text-xs">Click "Add Person" to add your first team member</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── REPORTS ─────────────────────────────────────────────────────────────────
 function ReportsPage({ theme, darkMode, deliveries }) {

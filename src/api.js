@@ -116,3 +116,36 @@ export const getBillingSummaryAPI = async () => {
   })
   return res.json()
 }
+// ─── DELIVERY PERSONS ─────────────────────────────────────────────────────────
+export const getDeliveryPersonsAPI = async () => {
+  const res = await fetch(`${BASE_URL}/auth/delivery-persons`, {
+    headers: headers()
+  })
+  return res.json()
+}
+
+export const addDeliveryPersonAPI = async (data) => {
+  const res = await fetch(`${BASE_URL}/auth/add-user`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ ...data, role: 'delivery' })
+  })
+  return res.json()
+}
+
+export const updateDeliveryPersonAPI = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/auth/delivery-persons/${id}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(data)
+  })
+  return res.json()
+}
+
+export const deleteDeliveryPersonAPI = async (id) => {
+  const res = await fetch(`${BASE_URL}/auth/delivery-persons/${id}`, {
+    method: 'DELETE',
+    headers: headers()
+  })
+  return res.json()
+}
