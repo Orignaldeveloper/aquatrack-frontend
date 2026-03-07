@@ -86,7 +86,8 @@ export default function AquaTrack() {
   const [darkMode, setDarkMode] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [customers, setCustomers] = useState(CUSTOMERS);
+  //const [customers, setCustomers] = useState(CUSTOMERS);
+  const [customers, setCustomers] = useState([]);
   const [deliveries, setDeliveries] = useState(DELIVERIES_TODAY);
   const [showModal, setShowModal] = useState(null);
   const [notification, setNotification] = useState(null);
@@ -709,8 +710,9 @@ function DeleteConfirm({ name, onConfirm, onCancel, theme }) {
 
 // ─── DELIVERY ─────────────────────────────────────────────────────────────────
 
-function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, notify, user }) {
+function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers: initialCustomers, notify, user }) {
   const today = new Date().toISOString().split("T")[0];
+  const [customers, setCustomers] = useState([]);
   const [form, setForm] = useState({
   customerId: '',
   delivered: '',
@@ -728,8 +730,11 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers, n
   const revenue = selectedCustomer ? form.delivered * selectedCustomer.rate : 0;
   const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
 
-  useEffect(() => {
+ useEffect(() => {
   fetchTodayDeliveries();
+  getCustomersAPI().then(data => {
+    if (data.success) setCustomers(data.customers);
+  }).catch(() => {});
   getDeliveryPersonsAPI().then(data => {
     if (data.success) setDeliveryPersons(data.persons);
   }).catch(() => {});
@@ -1316,114 +1321,143 @@ function BillingPage({ theme, darkMode, notify }) {
   };
 
   const handlePrint = (inv) => {
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Invoice ${inv.invoiceNo}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
-            .logo { font-size: 24px; font-weight: bold; color: #0891b2; }
-            .invoice-title { font-size: 28px; font-weight: bold; color: #1e293b; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .info-box { background: #f8fafc; padding: 15px; border-radius: 8px; }
-            .info-box h4 { margin: 0 0 8px; font-size: 12px; color: #64748b; text-transform: uppercase; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background: #f1f5f9; padding: 10px; text-align: left; font-size: 12px; color: #64748b; }
-            td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; }
-            .total-row { background: #0891b2; color: white; }
-            .total-row td { padding: 15px 10px; font-weight: bold; font-size: 16px; }
-            .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; }
-            .paid { background: #d1fae5; color: #065f46; }
-            .pending { background: #fef3c7; color: #92400e; }
-            .footer { margin-top: 40px; text-align: center; color: #94a3b8; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="logo">💧 AquaPure Distributors</div>
-              <div style="color:#64748b;font-size:13px;margin-top:4px">Water Can Distribution Service</div>
-            </div>
-            <div style="text-align:right">
-              <div class="invoice-title">INVOICE</div>
-              <div style="color:#64748b;font-size:13px">${inv.invoiceNo}</div>
-            </div>
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Invoice ${inv.invoiceNo}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 30px; color: #1a1a2e; }
+        .page { background: white; max-width: 720px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }
+        .header { background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 32px 40px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .company-name { color: white; font-size: 24px; font-weight: 800; }
+        .company-sub { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 4px; }
+        .invoice-label { text-align: right; }
+        .invoice-title { color: white; font-size: 28px; font-weight: 900; letter-spacing: 2px; }
+        .invoice-no { color: rgba(255,255,255,0.85); font-size: 13px; margin-top: 4px; }
+        .status-bar { padding: 10px 40px; display: flex; justify-content: flex-end; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+        .badge { padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+        .badge-paid { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+        .badge-pending { background: #fef3c7; color: #d97706; border: 1px solid #fde68a; }
+        .body { padding: 32px 40px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+        .info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
+        .info-value { font-size: 15px; font-weight: 700; color: #1e293b; }
+        .info-sub { font-size: 13px; color: #475569; margin-top: 3px; }
+        .table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: #f1f5f9; }
+        thead th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+        thead th:last-child { text-align: right; }
+        tbody td { padding: 14px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; }
+        tbody td:last-child { text-align: right; font-weight: 600; }
+        tbody tr:last-child td { border-bottom: none; }
+        .totals { margin-left: auto; width: 280px; }
+        .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; }
+        .total-final { display: flex; justify-content: space-between; padding: 14px 16px; background: linear-gradient(135deg, #0ea5e9, #2563eb); border-radius: 10px; margin-top: 12px; }
+        .total-final span { color: white; font-weight: 800; font-size: 16px; }
+        .payment-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; }
+        .payment-box.pending { background: #fffbeb; border-color: #fde68a; }
+        .payment-label { font-size: 12px; color: #64748b; font-weight: 600; }
+        .payment-value { font-size: 15px; font-weight: 800; color: #16a34a; }
+        .payment-value.pending { color: #d97706; }
+        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 40px; text-align: center; }
+        .footer p { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+        .thank { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        @media print { body { background: white; padding: 0; } .page { box-shadow: none; border-radius: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="page">
+        <div class="header">
+          <div>
+            <div class="company-name">💧 AquaPure Distributors</div>
+            <div class="company-sub">Water Can Distribution Service</div>
           </div>
-
+          <div class="invoice-label">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-no">${inv.invoiceNo}</div>
+          </div>
+        </div>
+        <div class="status-bar">
+          <span class="badge ${inv.paid ? 'badge-paid' : 'badge-pending'}">${inv.paid ? '✓ PAID' : '⏳ PENDING'}</span>
+        </div>
+        <div class="body">
           <div class="info-grid">
-            <div class="info-box">
-              <h4>Bill To</h4>
-              <div style="font-weight:bold">${inv.customerName}</div>
-              <div style="font-size:13px;color:#64748b;margin-top:4px">${inv.customerMobile || ''}</div>
-              <div style="font-size:13px;color:#64748b">${inv.customerAddress || ''}</div>
+            <div>
+              <div class="info-label">Bill To</div>
+              <div class="info-value">${inv.customerName}</div>
+              <div class="info-sub">${inv.customerMobile || ''}</div>
+              <div class="info-sub">${inv.customerAddress || ''}</div>
             </div>
-            <div class="info-box">
-              <h4>Invoice Details</h4>
-              <div style="font-size:13px">Period: <strong>${months[inv.month-1]} ${inv.year}</strong></div>
-              <div style="font-size:13px;margin-top:4px">Date: <strong>${new Date().toLocaleDateString('en-IN')}</strong></div>
-              <div style="margin-top:8px">
-                <span class="badge ${inv.paid ? 'paid' : 'pending'}">${inv.paid ? '✓ PAID' : '⏳ PENDING'}</span>
-              </div>
+            <div>
+              <div class="info-label">Invoice Details</div>
+              <div class="info-sub">Period: <strong>${months[inv.month - 1]} ${inv.year}</strong></div>
+              <div class="info-sub">Date: <strong>${new Date().toLocaleDateString('en-IN')}</strong></div>
+              <div class="info-sub">Invoice No: <strong>${inv.invoiceNo}</strong></div>
             </div>
           </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th>Qty</th>
-                <th>Rate</th>
-                <th style="text-align:right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>20L Water Can Delivery</td>
-                <td>${inv.totalCansDelivered} cans</td>
-                <td>₹${inv.ratePerCan}/can</td>
-                <td style="text-align:right">₹${inv.subtotal}</td>
-              </tr>
-              <tr>
-                <td>Cans Returned</td>
-                <td>${inv.totalCansReturned} cans</td>
-                <td>-</td>
-                <td style="text-align:right" class="badge">-</td>
-              </tr>
-              ${inv.previousBalance > 0 ? `
-              <tr>
-                <td style="color:#ef4444">Previous Balance</td>
-                <td>-</td>
-                <td>-</td>
-                <td style="text-align:right;color:#ef4444">₹${inv.previousBalance}</td>
-              </tr>` : ''}
-              <tr class="total-row">
-                <td colspan="3">Total Payable</td>
-                <td style="text-align:right">₹${inv.totalAmount}</td>
-              </tr>
-              ${inv.paidAmount > 0 ? `
-              <tr>
-                <td colspan="3" style="color:#10b981">Amount Paid</td>
-                <td style="text-align:right;color:#10b981">₹${inv.paidAmount}</td>
-              </tr>
-              <tr>
-                <td colspan="3" style="font-weight:bold">Balance Due</td>
-                <td style="text-align:right;font-weight:bold">₹${inv.balanceAmount}</td>
-              </tr>` : ''}
-            </tbody>
-          </table>
-
-          <div class="footer">
-            <p>Thank you for your business! | AquaPure Distributors | Contact: 9876543210</p>
-            <p>This is a computer generated invoice.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Qty</th>
+                  <th>Rate</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>20L Water Can Delivery</td>
+                  <td>${inv.totalCansDelivered} cans</td>
+                  <td>₹${inv.ratePerCan}/can</td>
+                  <td>₹${inv.subtotal}</td>
+                </tr>
+                <tr>
+                  <td>Cans Returned</td>
+                  <td>${inv.totalCansReturned} cans</td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+                ${inv.previousBalance > 0 ? `
+                <tr>
+                  <td style="color:#ef4444">Previous Balance</td>
+                  <td>-</td><td>-</td>
+                  <td style="color:#ef4444">₹${inv.previousBalance}</td>
+                </tr>` : ''}
+              </tbody>
+            </table>
           </div>
-          <script>window.print(); window.close();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
+          <div class="totals">
+            <div class="total-row"><span>Subtotal</span><span>₹${inv.subtotal}</span></div>
+            ${inv.previousBalance > 0 ? `<div class="total-row"><span>Previous Balance</span><span style="color:#ef4444">+₹${inv.previousBalance}</span></div>` : ''}
+            <div class="total-final"><span>Total Payable</span><span>₹${inv.totalAmount}</span></div>
+          </div>
+          ${inv.paid ? `
+          <div class="payment-box">
+            <div><div class="payment-label">Amount Paid</div><div class="payment-value">₹${inv.paidAmount}</div></div>
+            <div style="text-align:right"><div class="payment-label">Payment Date</div><div class="payment-value">${new Date(inv.paidDate).toLocaleDateString('en-IN')}</div></div>
+          </div>` : `
+          <div class="payment-box pending">
+            <div><div class="payment-label">Amount Due</div><div class="payment-value pending">₹${inv.totalAmount}</div></div>
+            <div style="text-align:right"><div class="payment-label">Status</div><div class="payment-value pending">Payment Pending</div></div>
+          </div>`}
+        </div>
+        <div class="footer">
+          <p class="thank">Thank you for your business!</p>
+          <p>AquaPure Distributors | Contact: 9876543210</p>
+          <p>This is a computer generated invoice.</p>
+        </div>
+      </div>
+      <script>window.onload = () => { window.print(); }</script>
+    </body>
+    </html>
+  `);
+  win.document.close();
+};
 
   return (
     <div className="p-6 space-y-5">
