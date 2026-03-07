@@ -149,3 +149,26 @@ export const deleteDeliveryPersonAPI = async (id) => {
   })
   return res.json()
 }
+// ─── TENANTS ──────────────────────────────────────────────────────────────────
+export const getTenantsAPI = async () => {
+  const res = await fetch(`${BASE_URL}/auth/tenants`, { headers: headers() })
+  return res.json()
+}
+
+export const createTenantAPI = async (data) => {
+  const res = await fetch(`${BASE_URL}/auth/register-tenant`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(data)
+  })
+  return res.json()
+}
+
+export const toggleTenantAPI = async (id, active) => {
+  const res = await fetch(`${BASE_URL}/auth/tenants/${id}/toggle`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify({ active })
+  })
+  return res.json()
+}

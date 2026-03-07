@@ -4,9 +4,9 @@ import {
   getCustomersAPI, createCustomerAPI, updateCustomerAPI, deleteCustomerAPI,
   getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI,
   getInvoicesAPI, generateBillingAPI, markAsPaidAPI,
-  getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI
+  getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI,
+  getTenantsAPI, createTenantAPI, toggleTenantAPI
 } from './api.js';
-
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const MOCK_USERS = [
   { id: "u1", name: "Rajesh Kumar", email: "admin@aquatrack.com", password: "admin123", role: "admin", tenantId: "t1", avatar: "RK" },
@@ -1953,56 +1953,125 @@ function ReportsPage({ theme, darkMode, deliveries }) {
 
 // ─── TENANTS (Superadmin) ──────────────────────────────────────────────────────
 function TenantsPage({ theme, darkMode, notify }) {
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    tenantName: '', tenantEmail: '', tenantPhone: '',
+    adminName: '', adminEmail: '', adminPassword: '', plan: 'basic'
+  });
+
+  const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
+
+  useEffect(() => { fetchTenants(); }, []);
+
+  const fetchTenants = async () => {
+    setLoading(true);
+    try {
+      const data = await getTenantsAPI();
+      if (data.success) setTenants(data.tenants);
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleCreate = async () => {
+    if (!form.tenantName || !form.adminEmail || !form.adminPassword)
+      return notify("Tenant name, admin email and password required", "error");
+    try {
+      const data = await createTenantAPI(form);
+      if (data.success) {
+        notify("Tenant created successfully!");
+        setShowForm(false);
+        setForm({ tenantName: '', tenantEmail: '', tenantPhone: '', adminName: '', adminEmail: '', adminPassword: '', plan: 'basic' });
+        fetchTenants();
+      } else {
+        notify(data.message || "Failed to create tenant", "error");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const handleToggle = async (id, currentActive) => {
+    try {
+      const data = await toggleTenantAPI(id, !currentActive);
+      if (data.success) {
+        setTenants(prev => prev.map(t => t._id === id ? { ...t, active: !currentActive } : t));
+        notify(`Tenant ${!currentActive ? 'activated' : 'deactivated'} successfully!`);
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const activeTenants = tenants.filter(t => t.active).length;
+
   return (
     <div className="p-6 space-y-5">
+
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-base">All Tenants</h2>
-        <button onClick={() => notify("New tenant creation coming soon!")}
+        <div>
+          <h2 className="font-bold text-base">All Tenants</h2>
+          <p className={`text-xs ${theme.subtext}`}>{tenants.length} total • {activeTenants} active</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
           <Icon name="plus" size={15} /> New Tenant
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {TENANTS.map(t => (
-          <div key={t.id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
-                <Icon name="droplet" size={20} className="text-white" />
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-400/10 text-gray-500"}`}>
-                {t.active ? "Active" : "Inactive"}
-              </span>
+
+      {/* Create Form */}
+      {showForm && (
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="text-sm font-semibold mb-4">Create New Tenant</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name *</label>
+              <input value={form.tenantName} onChange={e => setForm(p => ({ ...p, tenantName: e.target.value }))} className={ic} placeholder="AquaFresh Distributors" />
             </div>
-            <h3 className="font-bold text-sm mb-1">{t.name}</h3>
-            <div className={`text-xs ${theme.subtext} capitalize mb-4`}>{t.plan} plan</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
-                <div className="text-lg font-bold">{t.customers}</div>
-                <div className={`text-xs ${theme.subtext}`}>Customers</div>
-              </div>
-              <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
-                <div className="text-lg font-bold">₹{(t.revenue/1000).toFixed(0)}k</div>
-                <div className={`text-xs ${theme.subtext}`}>Revenue</div>
-              </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Email</label>
+              <input value={form.tenantEmail} onChange={e => setForm(p => ({ ...p, tenantEmail: e.target.value }))} className={ic} placeholder="business@email.com" />
             </div>
-            <div className="flex gap-2 mt-4">
-              <button className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors">Manage</button>
-              <button onClick={() => notify(`${t.active ? "Deactivated" : "Activated"} ${t.name}`)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${t.active ? "border-red-500/30 text-red-500 hover:bg-red-500/10" : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
-                {t.active ? "Deactivate" : "Activate"}
-              </button>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
+              <input value={form.tenantPhone} onChange={e => setForm(p => ({ ...p, tenantPhone: e.target.value }))} className={ic} placeholder="9876543210" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
+              <select value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))} className={ic}>
+                <option value="basic">Basic</option>
+                <option value="pro">Pro</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+            <div className={`col-span-2 border-t pt-3 ${darkMode ? "border-gray-700" : "border-gray-100"}`}>
+              <p className={`text-xs font-semibold ${theme.subtext} mb-3`}>Admin Account</p>
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Name</label>
+              <input value={form.adminName} onChange={e => setForm(p => ({ ...p, adminName: e.target.value }))} className={ic} placeholder="Admin Name" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Email *</label>
+              <input value={form.adminEmail} onChange={e => setForm(p => ({ ...p, adminEmail: e.target.value }))} className={ic} placeholder="admin@business.com" autoComplete="new-email" />
+            </div>
+            <div className="col-span-2">
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Password *</label>
+              <input type="password" value={form.adminPassword} onChange={e => setForm(p => ({ ...p, adminPassword: e.target.value }))} className={ic} placeholder="Min 6 characters" autoComplete="new-password" />
             </div>
           </div>
-        ))}
-      </div>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setShowForm(false)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+            <button onClick={handleCreate} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Create Tenant</button>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Tenants", value: 3, color: "from-blue-500 to-cyan-500" },
-          { label: "Active", value: 2, color: "from-emerald-500 to-teal-500" },
-          { label: "Total Customers", value: 101, color: "from-violet-500 to-purple-500" },
-          { label: "Platform Revenue", value: "₹2.69L", color: "from-amber-500 to-orange-500" },
+          { label: "Total Tenants", value: tenants.length, color: "from-blue-500 to-cyan-500" },
+          { label: "Active", value: activeTenants, color: "from-emerald-500 to-teal-500" },
+          { label: "Inactive", value: tenants.length - activeTenants, color: "from-rose-500 to-red-500" },
+          { label: "Total Customers", value: tenants.reduce((s, t) => s + (t.customerCount || 0), 0), color: "from-violet-500 to-purple-500" },
         ].map((s, i) => (
           <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-2`}>
@@ -2013,6 +2082,56 @@ function TenantsPage({ theme, darkMode, notify }) {
           </div>
         ))}
       </div>
+
+      {/* Loading */}
+      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading tenants...</div>}
+
+      {/* Tenant Cards */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {tenants.map(t => (
+            <div key={t._id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                  <Icon name="droplet" size={20} className="text-white" />
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-400/10 text-gray-500"}`}>
+                  {t.active ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <h3 className="font-bold text-sm mb-1">{t.name}</h3>
+              <div className={`text-xs ${theme.subtext} capitalize mb-1`}>{t.plan} plan</div>
+              <div className={`text-xs ${theme.subtext} mb-4`}>
+                👤 {t.adminName || 'No admin'} • {t.adminEmail || ''}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                  <div className="text-lg font-bold">{t.customerCount || 0}</div>
+                  <div className={`text-xs ${theme.subtext}`}>Customers</div>
+                </div>
+                <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                  <div className={`text-xs ${theme.subtext} mt-1`}>{new Date(t.createdAt).toLocaleDateString('en-IN')}</div>
+                  <div className={`text-xs ${theme.subtext}`}>Created</div>
+                </div>
+              </div>
+              <button onClick={() => handleToggle(t._id, t.active)}
+                className={`w-full py-2 rounded-xl text-xs font-semibold border transition-colors
+                  ${t.active
+                    ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                    : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+                {t.active ? "Deactivate Tenant" : "Activate Tenant"}
+              </button>
+            </div>
+          ))}
+          {tenants.length === 0 && (
+            <div className={`col-span-3 text-center py-16 ${theme.subtext}`}>
+              <div className="text-4xl mb-3">🏢</div>
+              <div className="text-sm font-medium mb-1">No tenants yet</div>
+              <div className="text-xs">Click "New Tenant" to create your first tenant</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
