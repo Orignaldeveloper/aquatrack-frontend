@@ -248,7 +248,7 @@ export default function AquaTrack() {
           {activeTab === "customers" && <CustomersPage theme={theme} darkMode={darkMode} customers={customers} setCustomers={setCustomers} notify={notify} setShowModal={setShowModal} />}
           {activeTab === "delivery" && <DeliveryPage theme={theme} darkMode={darkMode} deliveries={deliveries} setDeliveries={setDeliveries} customers={customers} notify={notify} user={user} />}
           {activeTab === "inventory" && <InventoryPage theme={theme} darkMode={darkMode} customers={customers} notify={notify} />}
-          {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} />}
+          {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} user={user} />}
           {activeTab === "reports" && <ReportsPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
           {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} />}
           {activeTab === "team" && <TeamPage theme={theme} darkMode={darkMode} notify={notify} user={user} />}
@@ -1267,7 +1267,7 @@ function InventoryPage({ theme, darkMode, customers, notify }) {
 // ─── BILLING PAGE ─────────────────────────────────────────────────────────────
 // Replace your existing BillingPage function in App.jsx with this complete version
 
-function BillingPage({ theme, darkMode, notify }) {
+function BillingPage({ theme, darkMode, notify, user }) {
   const [invoices, setInvoices] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1332,7 +1332,7 @@ function BillingPage({ theme, darkMode, notify }) {
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 30px; color: #1a1a2e; }
         .page { background: white; max-width: 720px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }
         .header { background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 32px 40px; display: flex; justify-content: space-between; align-items: flex-start; }
-        .company-name { color: white; font-size: 24px; font-weight: 800; }
+        .company-name { color: white; font-size: 26px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
         .company-sub { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 4px; }
         .invoice-label { text-align: right; }
         .invoice-title { color: white; font-size: 28px; font-weight: 900; letter-spacing: 2px; }
@@ -1356,8 +1356,8 @@ function BillingPage({ theme, darkMode, notify }) {
         tbody tr:last-child td { border-bottom: none; }
         .totals { margin-left: auto; width: 280px; }
         .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; }
-        .total-final { display: flex; justify-content: space-between; padding: 14px 16px; background: linear-gradient(135deg, #0ea5e9, #2563eb); border-radius: 10px; margin-top: 12px; }
-        .total-final span { color: white; font-weight: 800; font-size: 16px; }
+        .total-final { display: flex; justify-content: space-between; padding: 14px 16px; background: #f8fafc; border: 2px solid #1e293b; border-radius: 10px; margin-top: 12px; }
+        .total-final span { color: #1e293b; font-weight: 900; font-size: 18px; }
         .payment-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; }
         .payment-box.pending { background: #fffbeb; border-color: #fde68a; }
         .payment-label { font-size: 12px; color: #64748b; font-weight: 600; }
@@ -1372,17 +1372,15 @@ function BillingPage({ theme, darkMode, notify }) {
     <body>
       <div class="page">
         <div class="header">
-          <div>
-            <div class="company-name">💧 AquaPure Distributors</div>
-            <div class="company-sub">Water Can Distribution Service</div>
-          </div>
-          <div class="invoice-label">
-            <div class="invoice-title">INVOICE</div>
-            <div class="invoice-no">${inv.invoiceNo}</div>
-          </div>
+        <div>
+         <div class="company-name">💧 ${user?.tenantName || 'AquaTrack'}</div>
+         <div class="company-sub" style="margin-top:6px">📍 ${user?.tenantAddress || ''}</div>
+         <div class="company-sub">📞 ${user?.tenantPhone || ''} | ✉️ ${user?.tenantEmail || ''}</div>
+         </div>
+         <div class="invoice-label">
+         <div class="invoice-title">INVOICE</div>
+         <div class="invoice-no">${inv.invoiceNo}</div>
         </div>
-        <div class="status-bar">
-          <span class="badge ${inv.paid ? 'badge-paid' : 'badge-pending'}">${inv.paid ? '✓ PAID' : '⏳ PENDING'}</span>
         </div>
         <div class="body">
           <div class="info-grid">
@@ -1436,19 +1434,15 @@ function BillingPage({ theme, darkMode, notify }) {
             ${inv.previousBalance > 0 ? `<div class="total-row"><span>Previous Balance</span><span style="color:#ef4444">+₹${inv.previousBalance}</span></div>` : ''}
             <div class="total-final"><span>Total Payable</span><span>₹${inv.totalAmount}</span></div>
           </div>
-          ${inv.paid ? `
+         ${inv.paid ? `
           <div class="payment-box">
             <div><div class="payment-label">Amount Paid</div><div class="payment-value">₹${inv.paidAmount}</div></div>
             <div style="text-align:right"><div class="payment-label">Payment Date</div><div class="payment-value">${new Date(inv.paidDate).toLocaleDateString('en-IN')}</div></div>
-          </div>` : `
-          <div class="payment-box pending">
-            <div><div class="payment-label">Amount Due</div><div class="payment-value pending">₹${inv.totalAmount}</div></div>
-            <div style="text-align:right"><div class="payment-label">Status</div><div class="payment-value pending">Payment Pending</div></div>
-          </div>`}
+          </div>` : ''}
         </div>
         <div class="footer">
           <p class="thank">Thank you for your business!</p>
-          <p>AquaPure Distributors | Contact: 9876543210</p>
+          <p>${user?.tenantName || ''} | 📞 ${user?.tenantPhone || ''} | ✉️ ${user?.tenantEmail || ''}</p>
           <p>This is a computer generated invoice.</p>
         </div>
       </div>
