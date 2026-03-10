@@ -1456,12 +1456,7 @@ function BillingPage({ theme, darkMode, notify, user }) {
                   <td>₹${inv.ratePerCan}/can</td>
                   <td>₹${inv.subtotal}</td>
                 </tr>
-                <tr>
-                  <td>Cans Returned</td>
-                  <td>${inv.totalCansReturned} cans</td>
-                  <td>-</td>
-                  <td>-</td>
-                </tr>
+                
                 ${inv.previousBalance > 0 ? `
                 <tr>
                   <td style="color:#ef4444">Previous Balance</td>
