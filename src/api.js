@@ -172,3 +172,11 @@ export const toggleTenantAPI = async (id, active) => {
   })
   return res.json()
 }
+export const updateDeliveryAPI = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/deliveries/${id}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(data)
+  })
+  return res.json()
+}

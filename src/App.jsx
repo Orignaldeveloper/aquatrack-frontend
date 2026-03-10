@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   loginAPI,
   getCustomersAPI, createCustomerAPI, updateCustomerAPI, deleteCustomerAPI,
-  getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI,
+  getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI, updateDeliveryAPI,
   getInvoicesAPI, generateBillingAPI, markAsPaidAPI,
   getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI,
   getTenantsAPI, createTenantAPI, toggleTenantAPI
@@ -723,6 +723,7 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers: i
  
   const [loading, setLoading] = useState(false);
   const [deliveryPersons, setDeliveryPersons] = useState([]);
+  const [editingDelivery, setEditingDelivery] = useState(null);
   const [search, setSearch] = useState("");
   const [personFilter, setPersonFilter] = useState("All");
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -770,11 +771,40 @@ function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers: i
     setLoading(false);
   };
 
-  const handleDelete = async (id) => {
-    await deleteDeliveryAPI(id);
-    setDeliveries(prev => prev.filter(d => d._id !== id));
-    notify("Delivery removed");
-  };
+  const handleEdit = (d) => {
+  setEditingDelivery(d);
+  setForm({
+    customerId: d.customerId?._id || d.customerId,
+    delivered: d.delivered,
+    returned: d.returned,
+    deliveryPersonName: d.deliveryPersonName,
+    date: new Date(d.date).toISOString().split("T")[0]
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const handleUpdate = async () => {
+  if (!form.customerId) return notify("Select a customer", "error");
+  setLoading(true);
+  try {
+    const data = await updateDeliveryAPI(editingDelivery._id, {
+      customerId: form.customerId,
+      delivered: +form.delivered,
+      returned: +form.returned,
+      date: form.date,
+      deliveryPersonName: form.deliveryPersonName
+    });
+    if (data.success) {
+      setDeliveries(prev => prev.map(d => d._id === editingDelivery._id ? data.delivery : d));
+      notify("Delivery updated!");
+      setEditingDelivery(null);
+      setForm({ customerId: '', delivered: '', returned: '', deliveryPersonName: user?.name || '', date: today });
+    } else {
+      notify(data.message || "Failed", "error");
+    }
+  } catch { notify("Server error", "error"); }
+  setLoading(false);
+};
 
   const persons = ["All", ...new Set(deliveries.map(d => d.deliveryPersonName).filter(Boolean))];
 
@@ -847,10 +877,17 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
                 <div className="text-xs text-emerald-600/70">Net delivered: {form.delivered - form.returned} cans</div>
               </div>
             )}
-            <button onClick={handleAdd} disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-60 transition-opacity shadow-md">
-              {loading ? "Logging..." : "Log Delivery"}
-            </button>
+            {editingDelivery && (
+  <button onClick={() => { setEditingDelivery(null); setForm({ customerId: '', delivered: '', returned: '', deliveryPersonName: user?.name || '', date: today }); }}
+    className="w-full py-2 rounded-xl border text-sm mb-2 text-gray-500">
+    Cancel Edit
+  </button>
+)}
+<button onClick={editingDelivery ? handleUpdate : handleAdd} disabled={loading}
+  className={`w-full py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90 disabled:opacity-60 transition-opacity shadow-md
+    ${editingDelivery ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-cyan-500 to-blue-600"}`}>
+  {loading ? "Saving..." : editingDelivery ? "Update Delivery" : "Log Delivery"}
+</button>
           </div>
         </div>
 
@@ -906,10 +943,10 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
                     <td className="px-4 py-3 text-xs">{d.deliveryPersonName}</td>
                     <td className="px-4 py-3"><span className="text-xs font-bold text-amber-500">₹{d.revenue}</span></td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleDelete(d._id)}
-                        className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors">
-                        <Icon name="trash" size={13} />
-                      </button>
+                    <button onClick={() => handleEdit(d)}
+                    className={`p-1.5 rounded-lg transition-colors ${editingDelivery?._id === d._id ? "bg-amber-500/20 text-amber-500" : "hover:bg-blue-500/10 text-blue-400"}`}>
+                    <Icon name="edit" size={13} />
+                    </button>
                     </td>
                   </tr>
                 ))}
@@ -928,8 +965,9 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
 }
 
 // ─── INVENTORY ────────────────────────────────────────────────────────────────
-function InventoryPage({ theme, darkMode, customers, notify }) {
+function InventoryPage({ theme, darkMode, notify }) {
   const [deliveries, setDeliveries] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState("All");
@@ -983,8 +1021,11 @@ function InventoryPage({ theme, darkMode, customers, notify }) {
 };
 
   useEffect(() => {
-    fetchDeliveries();
-  }, [viewMode, selectedDate, selectedMonth, selectedYear]);
+  fetchDeliveries();
+  getCustomersAPI().then(data => {
+    if (data.success) setCustomers(data.customers);
+  }).catch(() => {});
+}, [viewMode, selectedDate, selectedMonth, selectedYear]);
 
   const fetchDeliveries = async () => {
     setLoading(true);
@@ -1112,11 +1153,12 @@ function InventoryPage({ theme, darkMode, customers, notify }) {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: "Total Deliveries", value: filtered.length, color: "from-blue-500 to-cyan-500" },
           { label: "Cans Delivered", value: totalDelivered, color: "from-emerald-500 to-teal-500" },
           { label: "Cans Returned", value: totalReturned, color: "from-violet-500 to-purple-500" },
+          { label: "Net Cans Out", value: totalNet, color: "from-rose-500 to-red-500" },
           { label: "Total Revenue", value: `₹${totalRevenue}`, color: "from-amber-500 to-orange-500" },
         ].map((s, i) => (
           <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
