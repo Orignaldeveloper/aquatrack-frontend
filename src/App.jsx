@@ -114,7 +114,7 @@ export default function AquaTrack() {
     header: darkMode ? "bg-gray-900/80 border-gray-800" : "bg-white/80 border-gray-100",
   };
 
-  if (!user) return <LoginPage onLogin={(u) => { setUser(u); setActiveTab(u.role === 'delivery' ? 'delivery' : 'dashboard'); }} darkMode={darkMode} />;
+  if (!user) return <LoginPage onLogin={(u) => { setUser(u); setActiveTab(u.role === 'superadmin' ? 'dashboard' : 'delivery'); }} darkMode={darkMode} />;
 
   const navItems = user.role === "superadmin"
     ? [{ id: "dashboard", label: "Dashboard", icon: "dashboard" }, { id: "tenants", label: "Tenants", icon: "tenants" }, { id: "reports", label: "Reports", icon: "reports" }]
