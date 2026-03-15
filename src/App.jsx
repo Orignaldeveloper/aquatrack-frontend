@@ -339,7 +339,8 @@ function LoginPage({ onLogin, darkMode }) {
             </button>
           </div>
 
-          <p className="text-center text-xs text-gray-600 mt-6">Multi-tenant SaaS • JWT Auth • Role-based Access</p>
+          <p className="text-center text-xs text-yellow-600 mt-6"> Contact : 8766425371 </p>
+          <p className="text-center text-xs mt-2 italic font-semibold text-yellow-400">BIJODE & SON'S PRODUCT</p>
         </div>
       </div>
     </div>
