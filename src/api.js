@@ -180,3 +180,12 @@ export const updateDeliveryAPI = async (id, data) => {
   })
   return res.json()
 }
+// Update tenant
+export const updateTenantAPI = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/auth/tenants/${id}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify(data)
+  })
+  return res.json()
+}

@@ -5,7 +5,7 @@ import {
   getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI, updateDeliveryAPI,
   getInvoicesAPI, generateBillingAPI, markAsPaidAPI,
   getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI,
-  getTenantsAPI, createTenantAPI, toggleTenantAPI
+  getTenantsAPI, createTenantAPI, toggleTenantAPI, updateTenantAPI
 } from './api.js';
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const MOCK_USERS = [
@@ -250,7 +250,7 @@ export default function AquaTrack() {
           {activeTab === "inventory" && <InventoryPage theme={theme} darkMode={darkMode} customers={customers} notify={notify} />}
           {activeTab === "billing" && <BillingPage theme={theme} darkMode={darkMode} notify={notify} user={user} />}
           {activeTab === "reports" && <ReportsPage theme={theme} darkMode={darkMode} deliveries={deliveries} />}
-          {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} />}
+          {activeTab === "tenants" && <TenantsPage theme={theme} darkMode={darkMode} notify={notify} user={user} setUser={setUser} />}
           {activeTab === "team" && <TeamPage theme={theme} darkMode={darkMode} notify={notify} user={user} />}
         </main>
       </div>
@@ -1363,6 +1363,7 @@ function BillingPage({ theme, darkMode, notify, user }) {
   };
 
   const handlePrint = (inv) => {
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const win = window.open('', '_blank');
   win.document.write(`
     <!DOCTYPE html>
@@ -1415,9 +1416,9 @@ function BillingPage({ theme, darkMode, notify, user }) {
       <div class="page">
         <div class="header">
         <div>
-         <div class="company-name">💧 ${user?.tenantName || 'AquaTrack'}</div>
-         <div class="company-sub" style="margin-top:6px">📍 ${user?.tenantAddress || ''}</div>
-         <div class="company-sub">📞 ${user?.tenantPhone || ''} | ✉️ ${user?.tenantEmail || ''}</div>
+         <div class="company-name">💧 ${currentUser?.tenantName || 'AquaTrack'}</div>
+         <div class="company-sub" style="margin-top:6px">📍 ${currentUser?.tenantAddress || ''}</div>
+         <div class="company-sub">📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
          </div>
          <div class="invoice-label">
          <div class="invoice-title">INVOICE</div>
@@ -1479,7 +1480,7 @@ function BillingPage({ theme, darkMode, notify, user }) {
         </div>
         <div class="footer">
           <p class="thank">Thank you for your business!</p>
-          <p>${user?.tenantName || ''} | 📞 ${user?.tenantPhone || ''} | ✉️ ${user?.tenantEmail || ''}</p>
+          <p>${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</p>
           <p>This is a computer generated invoice.</p>
         </div>
       </div>
@@ -1983,10 +1984,12 @@ function ReportsPage({ theme, darkMode, deliveries }) {
 }
 
 // ─── TENANTS (Superadmin) ──────────────────────────────────────────────────────
-function TenantsPage({ theme, darkMode, notify }) {
+function TenantsPage({ theme, darkMode, notify, user, setUser }) {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+const [editTenant, setEditTenant] = useState(null);
+const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', plan: 'basic' });
   const [form, setForm] = useState({
     tenantName: '', tenantEmail: '', tenantPhone: '',
     adminName: '', adminEmail: '', adminPassword: '', plan: 'basic'
@@ -2030,7 +2033,35 @@ function TenantsPage({ theme, darkMode, notify }) {
       }
     } catch { notify("Server error", "error"); }
   };
+  const openEdit = (t) => {
+  setEditTenant(t);
+  setEditForm({ name: t.name, phone: t.phone || '', address: t.address || '', plan: t.plan });
+  setShowForm(false);
+};
 
+const handleUpdateTenant = async () => {
+  try {
+    const data = await updateTenantAPI(editTenant._id, editForm);
+   if (data.success) {
+  setTenants(prev => prev.map(t => t._id === editTenant._id ? { ...t, ...editForm } : t));
+  notify("Tenant updated successfully!");
+  setEditTenant(null);
+  // Update localStorage so print reflects new details
+  const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const updatedUser = {
+    ...savedUser,
+    tenantName: editForm.name,
+    tenantPhone: editForm.phone,
+    tenantAddress: editForm.address,
+  };
+  localStorage.setItem('user', JSON.stringify(updatedUser));
+  if (setUser) setUser(updatedUser);
+}
+    else {
+      notify(data.message || "Failed", "error");
+    }
+  } catch { notify("Server error", "error"); }
+};
   const activeTenants = tenants.filter(t => t.active).length;
 
   return (
@@ -2095,6 +2126,52 @@ function TenantsPage({ theme, darkMode, notify }) {
           </div>
         </div>
       )}
+      
+      {/* Edit Form */}
+{editTenant && (
+  <div className={`${theme.card} border rounded-2xl p-5 shadow-sm border-blue-500/30`}>
+    <h3 className="text-sm font-semibold mb-4">Edit — {editTenant.name}</h3>
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name</label>
+        <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+          className={ic} placeholder="Business Name" />
+      </div>
+      <div>
+        <label className={`text-xs ${theme.subtext} mb-1 block`}>Email (readonly)</label>
+        <input value={editTenant.email} readOnly
+          className={`${ic} opacity-50 cursor-not-allowed`} />
+      </div>
+      <div>
+        <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
+        <input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+          className={ic} placeholder="Phone" />
+      </div>
+      <div>
+        <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
+        <select value={editForm.plan} onChange={e => setEditForm(p => ({ ...p, plan: e.target.value }))}
+          className={ic}>
+          <option value="basic">Basic</option>
+          <option value="pro">Pro</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+      </div>
+      <div className="col-span-2">
+        <label className={`text-xs ${theme.subtext} mb-1 block`}>Address</label>
+        <input value={editForm.address} onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))}
+          className={ic} placeholder="Business Address" />
+      </div>
+    </div>
+    <div className="flex gap-3 mt-4">
+      <button onClick={() => setEditTenant(null)}
+        className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+      <button onClick={handleUpdateTenant}
+        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">
+        Save Changes
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -2145,13 +2222,19 @@ function TenantsPage({ theme, darkMode, notify }) {
                   <div className={`text-xs ${theme.subtext}`}>Created</div>
                 </div>
               </div>
-              <button onClick={() => handleToggle(t._id, t.active)}
-                className={`w-full py-2 rounded-xl text-xs font-semibold border transition-colors
-                  ${t.active
-                    ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
-                    : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
-                {t.active ? "Deactivate Tenant" : "Activate Tenant"}
-              </button>
+    <div className="flex gap-2">
+  <button onClick={() => openEdit(t)}
+    className="flex-1 py-2 rounded-xl text-xs font-semibold border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors">
+    Edit
+  </button>
+  <button onClick={() => handleToggle(t._id, t.active)}
+    className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors
+      ${t.active
+        ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+        : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+    {t.active ? "Deactivate" : "Activate"}
+  </button>
+</div>
             </div>
           ))}
           {tenants.length === 0 && (
@@ -2164,5 +2247,5 @@ function TenantsPage({ theme, darkMode, notify }) {
         </div>
       )}
     </div>
-  );
+ );
 }
