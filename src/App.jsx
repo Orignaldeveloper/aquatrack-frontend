@@ -307,9 +307,8 @@ function LoginPage({ onLogin, darkMode }) {
           {/* Demo badges */}
           <div className="grid grid-cols-3 gap-2 mb-6">
             {[
-              { label: "Admin", email: "admin@aquatrack.com", pass: "admin123" },
-              { label: "Delivery", email: "delivery@aquatrack.com", pass: "del123" },
-              { label: "Super", email: "super@aquatrack.com", pass: "super123" },
+              { label: "Admin", email: "admin@gmail.com", pass: "*****" },
+              { label: "Delivery", email: "delivery@gmail.com", pass: "*****" },
             ].map(d => (
               <button key={d.label} onClick={() => { setEmail(d.email); setPassword(d.pass); setError(""); }}
                 className="text-xs py-1.5 px-2 rounded-lg bg-white/5 border border-white/10 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/40 transition-all">
