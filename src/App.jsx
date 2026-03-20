@@ -102,6 +102,34 @@ export default function AquaTrack() {
   setUser(null);
   };
 
+  useEffect(() => {
+  if (!user) return;
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5002/api'}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        // Check if tenant is inactive
+        if (data.user.tenantId && !data.user.tenantId?.active) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+          alert('Your account has been suspended. Contact support.');
+        }
+      }
+    } catch {}
+  };
+
+  // Check after 10 seconds for testing 2             * 60 * 60 * 1000 and 10 * 1000
+  const interval = setInterval(checkStatus, * 60 * 60 * 1000);
+  return () => clearInterval(interval);
+}, [user]);
+
   const theme = {
     bg: darkMode ? "bg-gray-950" : "bg-slate-50",
     sidebar: darkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100",
