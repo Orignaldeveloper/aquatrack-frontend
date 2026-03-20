@@ -1611,9 +1611,44 @@ function BillingPage({ theme, darkMode, notify, user }) {
     }
   };
 
-  const handlePrint = (inv) => {
+  const handlePrint = async (inv) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  
+
+  // Fetch deliveries for this customer for this month
+  const start = new Date(inv.year, inv.month - 1, 1).toISOString().split("T")[0];
+  const end = new Date(inv.year, inv.month, 0).toISOString().split("T")[0];
+  let deliveryRows = '';
+  let totalDelivered = 0;
+  let totalReturned = 0;
+  let totalNet = 0;
+
+  try {
+    const data = await getDeliveriesAPI({ dateRange: `${start},${end}` });
+    if (data.success) {
+      const customerDeliveries = data.deliveries
+        .filter(d => (d.customerName || d.customerId?.name) === inv.customerName)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      totalDelivered = customerDeliveries.reduce((s, d) => s + d.delivered, 0);
+      totalReturned = customerDeliveries.reduce((s, d) => s + d.returned, 0);
+      totalNet = totalDelivered - totalReturned;
+
+      if (customerDeliveries.length > 0) {
+        deliveryRows = customerDeliveries.map((d, i) => `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${i + 1}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #2563eb; font-weight: 700;">${d.delivered}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #10b981; font-weight: 700;">${d.returned}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #7c3aed; font-weight: 700;">${d.netDelivered}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${d.deliveryPersonName || '-'}</td>
+            <td style="padding: 10px 14px; font-size: 13px; color: #d97706; font-weight: 700;">₹${d.revenue}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch {}
+
   const printContent = `
     <!DOCTYPE html>
     <html>
@@ -1651,10 +1686,22 @@ function BillingPage({ theme, darkMode, notify, user }) {
         .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 40px; text-align: center; }
         .footer p { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
         .thank { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 6px; }
-        @media print { body { background: white; padding: 0; } .page { box-shadow: none; border-radius: 0; } }
+        .page-break { page-break-before: always; }
+        .page2 { background: white; max-width: 720px; margin: 30px auto 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }
+        .page2-header { background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+        .page2-title { color: white; font-size: 18px; font-weight: 800; }
+        .page2-sub { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 2px; }
+        .tfoot-row { background: #f1f5f9; font-weight: 700; }
+        @media print { 
+          body { background: white; padding: 0; } 
+          .page { box-shadow: none; border-radius: 0; }
+          .page2 { box-shadow: none; border-radius: 0; margin: 0; }
+        }
       </style>
     </head>
     <body>
+
+      <!-- PAGE 1 - INVOICE -->
       <div class="page">
         <div class="header">
           <div>
@@ -1725,11 +1772,61 @@ function BillingPage({ theme, darkMode, notify, user }) {
           <p>This is a computer generated invoice.</p>
         </div>
       </div>
+
+      <!-- PAGE 2 - DELIVERY LOG -->
+      ${deliveryRows ? `
+      <div class="page-break"></div>
+      <div class="page2">
+        <div class="page2-header">
+          <div>
+            <div class="page2-title">📦 Delivery Statement</div>
+            <div class="page2-sub">${inv.customerName} | ${months[inv.month - 1]} ${inv.year}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:white; font-size:14px; font-weight:700;">💧 ${currentUser?.tenantName || ''}</div>
+            <div style="color:rgba(255,255,255,0.75); font-size:12px;">${inv.invoiceNo}</div>
+          </div>
+        </div>
+        <div style="padding: 24px 40px;">
+          <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr style="background:#f1f5f9;">
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">#</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Date</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Delivered</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Returned</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Net</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Person</th>
+                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${deliveryRows}
+              </tbody>
+              <tfoot>
+                <tr class="tfoot-row">
+                  <td colspan="2" style="padding:12px 14px; font-size:13px; color:#1e293b; font-weight:700;">Total</td>
+                  <td style="padding:12px 14px; font-size:13px; color:#2563eb; font-weight:700;">${totalDelivered}</td>
+                  <td style="padding:12px 14px; font-size:13px; color:#10b981; font-weight:700;">${totalReturned}</td>
+                  <td style="padding:12px 14px; font-size:13px; color:#7c3aed; font-weight:700;">${totalNet}</td>
+                  <td style="padding:12px 14px;"></td>
+                  <td style="padding:12px 14px; font-size:13px; color:#d97706; font-weight:700;">₹${inv.subtotal}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="footer">
+          <p>${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</p>
+          <p>This is a computer generated statement.</p>
+        </div>
+      </div>` : ''}
+
     </body>
     </html>
   `;
 
-  // Inject into hidden div and print
   const printArea = document.getElementById('print-area');
   printArea.innerHTML = printContent;
   printArea.style.display = 'block';
