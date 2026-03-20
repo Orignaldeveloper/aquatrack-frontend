@@ -5,9 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AquaTrack</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style id="print-styles">
+    @media print {
+    body > * { display: none !important; }
+    #print-area { display: block !important; }
+    }
+    #print-area { display: none; }
+</style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="print-area"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

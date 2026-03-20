@@ -1613,12 +1613,11 @@ function BillingPage({ theme, darkMode, notify, user }) {
 
   const handlePrint = (inv) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const win = window.open('', '_blank');
-  win.document.write(`
+  
+  const printContent = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Invoice ${inv.invoiceNo}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 30px; color: #1a1a2e; }
@@ -1629,10 +1628,6 @@ function BillingPage({ theme, darkMode, notify, user }) {
         .invoice-label { text-align: right; }
         .invoice-title { color: white; font-size: 28px; font-weight: 900; letter-spacing: 2px; }
         .invoice-no { color: rgba(255,255,255,0.85); font-size: 13px; margin-top: 4px; }
-        .status-bar { padding: 10px 40px; display: flex; justify-content: flex-end; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-        .badge { padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; }
-        .badge-paid { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
-        .badge-pending { background: #fef3c7; color: #d97706; border: 1px solid #fde68a; }
         .body { padding: 32px 40px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
         .info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
@@ -1651,10 +1646,8 @@ function BillingPage({ theme, darkMode, notify, user }) {
         .total-final { display: flex; justify-content: space-between; padding: 14px 16px; background: #f8fafc; border: 2px solid #1e293b; border-radius: 10px; margin-top: 12px; }
         .total-final span { color: #1e293b; font-weight: 900; font-size: 18px; }
         .payment-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; }
-        .payment-box.pending { background: #fffbeb; border-color: #fde68a; }
         .payment-label { font-size: 12px; color: #64748b; font-weight: 600; }
         .payment-value { font-size: 15px; font-weight: 800; color: #16a34a; }
-        .payment-value.pending { color: #d97706; }
         .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 40px; text-align: center; }
         .footer p { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
         .thank { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 6px; }
@@ -1664,15 +1657,15 @@ function BillingPage({ theme, darkMode, notify, user }) {
     <body>
       <div class="page">
         <div class="header">
-        <div>
-         <div class="company-name">💧 ${currentUser?.tenantName || 'AquaTrack'}</div>
-         <div class="company-sub" style="margin-top:6px">📍 ${currentUser?.tenantAddress || ''}</div>
-         <div class="company-sub">📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
-         </div>
-         <div class="invoice-label">
-         <div class="invoice-title">INVOICE</div>
-         <div class="invoice-no">${inv.invoiceNo}</div>
-        </div>
+          <div>
+            <div class="company-name">💧 ${currentUser?.tenantName || 'AquaTrack'}</div>
+            <div class="company-sub" style="margin-top:6px">📍 ${currentUser?.tenantAddress || ''}</div>
+            <div class="company-sub">📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
+          </div>
+          <div class="invoice-label">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-no">${inv.invoiceNo}</div>
+          </div>
         </div>
         <div class="body">
           <div class="info-grid">
@@ -1706,7 +1699,6 @@ function BillingPage({ theme, darkMode, notify, user }) {
                   <td>₹${inv.ratePerCan}/can</td>
                   <td>₹${inv.subtotal}</td>
                 </tr>
-                
                 ${inv.previousBalance > 0 ? `
                 <tr>
                   <td style="color:#ef4444">Previous Balance</td>
@@ -1721,7 +1713,7 @@ function BillingPage({ theme, darkMode, notify, user }) {
             ${inv.previousBalance > 0 ? `<div class="total-row"><span>Previous Balance</span><span style="color:#ef4444">+₹${inv.previousBalance}</span></div>` : ''}
             <div class="total-final"><span>Total Payable</span><span>₹${inv.totalAmount}</span></div>
           </div>
-         ${inv.paid ? `
+          ${inv.paid ? `
           <div class="payment-box">
             <div><div class="payment-label">Amount Paid</div><div class="payment-value">₹${inv.paidAmount}</div></div>
             <div style="text-align:right"><div class="payment-label">Payment Date</div><div class="payment-value">${new Date(inv.paidDate).toLocaleDateString('en-IN')}</div></div>
@@ -1733,11 +1725,17 @@ function BillingPage({ theme, darkMode, notify, user }) {
           <p>This is a computer generated invoice.</p>
         </div>
       </div>
-      <script>window.onload = () => { window.print(); }</script>
     </body>
     </html>
-  `);
-  win.document.close();
+  `;
+
+  // Inject into hidden div and print
+  const printArea = document.getElementById('print-area');
+  printArea.innerHTML = printContent;
+  printArea.style.display = 'block';
+  window.print();
+  printArea.style.display = 'none';
+  printArea.innerHTML = '';
 };
 
   return (
