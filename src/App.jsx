@@ -708,6 +708,255 @@ function DeleteConfirm({ name, onConfirm, onCancel, theme }) {
   );
 }
 
+// ─── SEARCHABLE CUSTOMER DROPDOWN ────────────────────────────
+function CustomerSearchDropdown({ customers, value, onChange, theme }) {
+  const [query,       setQuery]       = React.useState('');
+  const [open,        setOpen]        = React.useState(false);
+  const [highlighted, setHighlighted] = React.useState(0);
+  const inputRef   = React.useRef(null);
+  const listRef    = React.useRef(null);
+  const wrapperRef = React.useRef(null);
+
+  const selected = customers.find(c => c._id === value) || null;
+
+  const filtered = query.trim() === ''
+    ? customers
+    : customers.filter(c =>
+        c.name.toLowerCase().includes(query.toLowerCase()) ||
+        (c.mobile && c.mobile.includes(query)) ||
+        (c.area   && c.area.toLowerCase().includes(query.toLowerCase()))
+      );
+
+  React.useEffect(() => {
+    const handleOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  React.useEffect(() => {
+    if (highlighted >= 0 && listRef.current) {
+      const item = listRef.current.children[highlighted];
+      if (item) item.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlighted]);
+
+  const selectCustomer = (customer) => {
+    onChange(customer._id);
+    setQuery('');
+    setOpen(false);
+    setHighlighted(0);
+  };
+
+  const clearSelection = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setQuery('');
+    setHighlighted(0);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleInputChange = (e) => {
+    setQuery(e.target.value);
+    setOpen(true);
+    setHighlighted(0);
+    if (value) onChange('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') setOpen(true);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted(h => Math.min(h + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted(h => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[highlighted]) selectCustomer(filtered[highlighted]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  const highlightMatch = (text, q) => {
+    if (!q.trim()) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span style={{ background: 'rgba(6,182,212,0.25)', borderRadius: 2, padding: '0 1px', fontWeight: 700 }}>
+          {text.slice(idx, idx + q.length)}
+        </span>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <div
+        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+        className={`flex items-center gap-2 rounded-xl border cursor-text transition-colors ${theme.input} ${open ? 'border-cyan-500 ring-1 ring-cyan-500/30' : ''}`}
+        style={{ padding: '0 10px' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          className="shrink-0" style={{ opacity: 0.45 }}>
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={selected && !query ? '' : query}
+          onChange={handleInputChange}
+          onFocus={() => { setOpen(true); setHighlighted(0); }}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            selected
+              ? `${selected.name}  —  ${selected.area || selected.mobile || ''}`
+              : `Search by name, mobile or area… (${customers.length} customers)`
+          }
+          style={{
+            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+            padding: '10px 0', fontSize: 14,
+            color: selected && !query ? '#06b6d4' : 'inherit',
+            fontWeight: selected && !query ? 600 : 400,
+            cursor: 'text',
+          }}
+        />
+
+        {selected ? (
+          <button onClick={clearSelection}
+            style={{ background: 'rgba(239,68,68,0.12)', border: 'none', borderRadius: 6,
+              color: '#ef4444', cursor: 'pointer', padding: '3px 8px',
+              fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            ✕
+          </button>
+        ) : (
+          <span style={{ background: 'rgba(100,116,139,0.15)', borderRadius: 6, color: '#94a3b8',
+            fontSize: 11, fontWeight: 700, padding: '2px 7px', flexShrink: 0 }}>
+            {filtered.length}
+          </span>
+        )}
+
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          style={{ flexShrink: 0, opacity: 0.4,
+            transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          zIndex: 9999, background: '#1e293b', border: '1px solid #334155',
+          borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+
+          <div style={{ padding: '7px 12px', background: '#0f172a', borderBottom: '1px solid #334155',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>
+              {query.trim()
+                ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''} for "${query}"`
+                : `All ${customers.length} active customers`}
+            </span>
+            {query.trim() && filtered.length === 0 && (
+              <span style={{ color: '#ef4444', fontSize: 11, fontWeight: 600 }}>No match</span>
+            )}
+          </div>
+
+          <div ref={listRef} style={{ maxHeight: 280, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                <div style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
+                  No customer found for "{query}"
+                </div>
+                <div style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>
+                  Try name, mobile number or area
+                </div>
+              </div>
+            ) : (
+              filtered.map((c, i) => {
+                const isHighlighted = i === highlighted;
+                const isSelected    = c._id === value;
+                return (
+                  <div key={c._id}
+                    onClick={() => selectCustomer(c)}
+                    onMouseEnter={() => setHighlighted(i)}
+                    style={{
+                      padding: '10px 14px', cursor: 'pointer',
+                      borderBottom: '1px solid rgba(51,65,85,0.5)',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      background: isSelected ? 'rgba(6,182,212,0.12)'
+                        : isHighlighted ? 'rgba(6,182,212,0.06)' : 'transparent',
+                      transition: 'background 0.1s',
+                    }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                        background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontWeight: 800, fontSize: 12 }}>
+                        {c.name[0]}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13,
+                          color: isSelected ? '#06b6d4' : '#e2e8f0',
+                          display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {highlightMatch(c.name, query)}
+                          {isSelected && (
+                            <span style={{ background: '#06b6d4', color: '#fff',
+                              borderRadius: 4, fontSize: 9, padding: '1px 5px', fontWeight: 800 }}>✓</span>
+                          )}
+                        </div>
+                        <div style={{ color: '#64748b', fontSize: 11, marginTop: 2, display: 'flex', gap: 10 }}>
+                          {c.mobile && <span>📞 {highlightMatch(c.mobile, query)}</span>}
+                          {c.area   && <span>📍 {highlightMatch(c.area, query)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                      <div style={{ color: '#06b6d4', fontWeight: 700, fontSize: 12 }}>
+                        ₹{c.rate}/can
+                      </div>
+                      {c.cansOut > 0 && (
+                        <div style={{ color: '#f59e0b', fontSize: 11, marginTop: 2 }}>
+                          🪣 {c.cansOut} out
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ padding: '6px 12px', background: '#0f172a',
+            borderTop: '1px solid #334155', display: 'flex', gap: 14 }}>
+            {[['↑↓', 'Navigate'], ['↵', 'Select'], ['Esc', 'Close']].map(([k, l]) => (
+              <span key={k} style={{ color: '#475569', fontSize: 10,
+                display: 'flex', gap: 4, alignItems: 'center' }}>
+                <kbd style={{ background: '#1e293b', borderRadius: 3, padding: '1px 5px',
+                  fontWeight: 700, fontSize: 10, color: '#64748b',
+                  border: '1px solid #334155' }}>{k}</kbd>
+                {l}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── DELIVERY ─────────────────────────────────────────────────────────────────
 
 function DeliveryPage({ theme, darkMode, deliveries, setDeliveries, customers: initialCustomers, notify, user }) {
@@ -832,12 +1081,12 @@ const totalReturned = filtered.reduce((s, d) => s + d.returned, 0);
             </div>
             <div>
               <label className={`text-xs ${theme.subtext} mb-1 block`}>Customer</label>
-              <select value={form.customerId} onChange={e => f("customerId", e.target.value)} className={`${ic} cursor-pointer`}>
-                <option value="">Select Customer...</option>
-                {customers.filter(c => c.active).map(c => (
-                  <option key={c._id} value={c._id}>{c.name} – {c.area}</option>
-                ))}
-              </select>
+              <CustomerSearchDropdown
+                 customers={customers.filter(c => c.active)}
+                 value={form.customerId}
+                 onChange={(id) => f("customerId", id)}
+                 theme={theme}
+              />
             </div>
             {selectedCustomer && (
               <div className={`px-3 py-2 rounded-xl ${darkMode ? "bg-cyan-500/10" : "bg-cyan-50"} border border-cyan-500/20`}>
