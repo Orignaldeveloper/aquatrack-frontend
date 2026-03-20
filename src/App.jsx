@@ -125,8 +125,8 @@ export default function AquaTrack() {
     } catch {}
   };
 
-  // Check after 10 seconds for testing 2             * 60 * 60 * 1000 and 10 * 1000
-  const interval = setInterval(checkStatus, * 60 * 60 * 1000);
+  // Check after 10 seconds for testing 2 
+  const interval = setInterval(checkStatus, 60 * 60 * 1000);
   return () => clearInterval(interval);
 }, [user]);
 
