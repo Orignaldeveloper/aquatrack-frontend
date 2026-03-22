@@ -1639,10 +1639,10 @@ function BillingPage({ theme, darkMode, notify, user }) {
     }
   };
 
-  const handlePrint = async (inv) => {
+ const handlePrint = async (inv) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
-  // Fetch deliveries for this customer for this month
+  // Fetch deliveries
   const start = new Date(inv.year, inv.month - 1, 1).toISOString().split("T")[0];
   const end = new Date(inv.year, inv.month, 0).toISOString().split("T")[0];
   let deliveryRows = '';
@@ -1663,14 +1663,14 @@ function BillingPage({ theme, darkMode, notify, user }) {
 
       if (customerDeliveries.length > 0) {
         deliveryRows = customerDeliveries.map((d, i) => `
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${i + 1}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #2563eb; font-weight: 700;">${d.delivered}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #10b981; font-weight: 700;">${d.returned}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #7c3aed; font-weight: 700;">${d.netDelivered}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #334155;">${d.deliveryPersonName || '-'}</td>
-            <td style="padding: 10px 14px; font-size: 13px; color: #d97706; font-weight: 700;">₹${d.revenue}</td>
+          <tr>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px;">${i + 1}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px;">${new Date(d.date).toLocaleDateString('en-IN')}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#2563eb; font-weight:700;">${d.delivered}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#10b981; font-weight:700;">${d.returned}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#7c3aed; font-weight:700;">${d.netDelivered}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px;">${d.deliveryPersonName || '-'}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#d97706; font-weight:700;">Rs.${d.revenue}</td>
           </tr>
         `).join('');
       }
@@ -1678,189 +1678,182 @@ function BillingPage({ theme, darkMode, notify, user }) {
   } catch {}
 
   const printContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; padding: 30px; color: #1a1a2e; }
-        .page { background: white; max-width: 720px; margin: 0 auto; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }
-        .header { background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 32px 40px; display: flex; justify-content: space-between; align-items: flex-start; }
-        .company-name { color: white; font-size: 26px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
-        .company-sub { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 4px; }
-        .invoice-label { text-align: right; }
-        .invoice-title { color: white; font-size: 28px; font-weight: 900; letter-spacing: 2px; }
-        .invoice-no { color: rgba(255,255,255,0.85); font-size: 13px; margin-top: 4px; }
-        .body { padding: 32px 40px; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
-        .info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; }
-        .info-value { font-size: 15px; font-weight: 700; color: #1e293b; }
-        .info-sub { font-size: 13px; color: #475569; margin-top: 3px; }
-        .table-wrap { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
-        table { width: 100%; border-collapse: collapse; }
-        thead { background: #f1f5f9; }
-        thead th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
-        thead th:last-child { text-align: right; }
-        tbody td { padding: 14px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; }
-        tbody td:last-child { text-align: right; font-weight: 600; }
-        tbody tr:last-child td { border-bottom: none; }
-        .totals { margin-left: auto; width: 280px; }
-        .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; }
-        .total-final { display: flex; justify-content: space-between; padding: 14px 16px; background: #f8fafc; border: 2px solid #1e293b; border-radius: 10px; margin-top: 12px; }
-        .total-final span { color: #1e293b; font-weight: 900; font-size: 18px; }
-        .payment-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 24px; display: flex; justify-content: space-between; align-items: center; }
-        .payment-label { font-size: 12px; color: #64748b; font-weight: 600; }
-        .payment-value { font-size: 15px; font-weight: 800; color: #16a34a; }
-        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 40px; text-align: center; }
-        .footer p { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
-        .thank { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 6px; }
-        .page-break { page-break-before: always; }
-        .page2 { background: white; max-width: 720px; margin: 30px auto 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }
-        .page2-header { background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
-        .page2-title { color: white; font-size: 18px; font-weight: 800; }
-        .page2-sub { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 2px; }
-        .tfoot-row { background: #f1f5f9; font-weight: 700; }
-        @media print { 
-          body { background: white; padding: 0; } 
-          .page { box-shadow: none; border-radius: 0; }
-          .page2 { box-shadow: none; border-radius: 0; margin: 0; }
-        }
-      </style>
-    </head>
-    <body>
-
+    <div id="pdf-invoice" style="font-family: Arial, sans-serif; width: 700px; background: white; color: #1a1a2e;">
+      
       <!-- PAGE 1 - INVOICE -->
-      <div class="page">
-        <div class="header">
-          <div>
-            <div class="company-name">💧 ${currentUser?.tenantName || 'AquaTrack'}</div>
-            <div class="company-sub" style="margin-top:6px">📍 ${currentUser?.tenantAddress || ''}</div>
-            <div class="company-sub">📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
-          </div>
-          <div class="invoice-label">
-            <div class="invoice-title">INVOICE</div>
-            <div class="invoice-no">${inv.invoiceNo}</div>
-          </div>
+      <div style="background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 28px 36px; display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="color: white; font-size: 22px; font-weight: 900; text-transform: uppercase;">${currentUser?.tenantName || 'AquaTrack'}</div>
+          <div style="color: rgba(255,255,255,0.8); font-size: 12px; margin-top: 4px;">📍 ${currentUser?.tenantAddress || ''}</div>
+          <div style="color: rgba(255,255,255,0.8); font-size: 12px; margin-top: 2px;">📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
         </div>
-        <div class="body">
-          <div class="info-grid">
-            <div>
-              <div class="info-label">Bill To</div>
-              <div class="info-value">${inv.customerName}</div>
-              <div class="info-sub">${inv.customerMobile || ''}</div>
-              <div class="info-sub">${inv.customerAddress || ''}</div>
-            </div>
-            <div>
-              <div class="info-label">Invoice Details</div>
-              <div class="info-sub">Period: <strong>${months[inv.month - 1]} ${inv.year}</strong></div>
-              <div class="info-sub">Date: <strong>${new Date().toLocaleDateString('en-IN')}</strong></div>
-              <div class="info-sub">Invoice No: <strong>${inv.invoiceNo}</strong></div>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>20L Water Can Delivery</td>
-                  <td>${inv.totalCansDelivered} cans</td>
-                  <td>₹${inv.ratePerCan}/can</td>
-                  <td>₹${inv.subtotal}</td>
-                </tr>
-                ${inv.previousBalance > 0 ? `
-                <tr>
-                  <td style="color:#ef4444">Previous Balance</td>
-                  <td>-</td><td>-</td>
-                  <td style="color:#ef4444">₹${inv.previousBalance}</td>
-                </tr>` : ''}
-              </tbody>
-            </table>
-          </div>
-          <div class="totals">
-            <div class="total-row"><span>Subtotal</span><span>₹${inv.subtotal}</span></div>
-            ${inv.previousBalance > 0 ? `<div class="total-row"><span>Previous Balance</span><span style="color:#ef4444">+₹${inv.previousBalance}</span></div>` : ''}
-            <div class="total-final"><span>Total Payable</span><span>₹${inv.totalAmount}</span></div>
-          </div>
-          ${inv.paid ? `
-          <div class="payment-box">
-            <div><div class="payment-label">Amount Paid</div><div class="payment-value">₹${inv.paidAmount}</div></div>
-            <div style="text-align:right"><div class="payment-label">Payment Date</div><div class="payment-value">${new Date(inv.paidDate).toLocaleDateString('en-IN')}</div></div>
-          </div>` : ''}
-        </div>
-        <div class="footer">
-          <p class="thank">Thank you for your business!</p>
-          <p>${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</p>
-          <p>This is a computer generated invoice.</p>
+        <div style="text-align: right;">
+          <div style="color: white; font-size: 26px; font-weight: 900; letter-spacing: 2px;">INVOICE</div>
+          <div style="color: rgba(255,255,255,0.85); font-size: 12px; margin-top: 4px;">${inv.invoiceNo}</div>
         </div>
       </div>
 
-      <!-- PAGE 2 - DELIVERY LOG -->
-      ${deliveryRows ? `
-      <div class="page-break"></div>
-      <div class="page2">
-        <div class="page2-header">
+      <div style="padding: 28px 36px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 28px;">
           <div>
-            <div class="page2-title">📦 Delivery Statement</div>
-            <div class="page2-sub">${inv.customerName} | ${months[inv.month - 1]} ${inv.year}</div>
+            <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px;">BILL TO</div>
+            <div style="font-size: 15px; font-weight: 700; color: #1e293b;">${inv.customerName}</div>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">${inv.customerMobile || ''}</div>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">${inv.customerAddress || ''}</div>
           </div>
-          <div style="text-align:right">
-            <div style="color:white; font-size:14px; font-weight:700;">💧 ${currentUser?.tenantName || ''}</div>
-            <div style="color:rgba(255,255,255,0.75); font-size:12px;">${inv.invoiceNo}</div>
+          <div>
+            <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px;">INVOICE DETAILS</div>
+            <div style="font-size: 12px; color: #475569;">Period: <strong>${months[inv.month - 1]} ${inv.year}</strong></div>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">Date: <strong>${new Date().toLocaleDateString('en-IN')}</strong></div>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">Invoice No: <strong>${inv.invoiceNo}</strong></div>
           </div>
         </div>
-        <div style="padding: 24px 40px;">
-          <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">
-            <table style="width:100%; border-collapse:collapse;">
+
+        <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">Description</th>
+                <th style="padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">Qty</th>
+                <th style="padding: 10px 14px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">Rate</th>
+                <th style="padding: 10px 14px; text-align: right; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 12px 14px; font-size: 13px; color: #334155; border-bottom: 1px solid #f1f5f9;">20L Water Can Delivery</td>
+                <td style="padding: 12px 14px; font-size: 13px; color: #334155; border-bottom: 1px solid #f1f5f9;">${inv.totalCansDelivered} cans</td>
+                <td style="padding: 12px 14px; font-size: 13px; color: #334155; border-bottom: 1px solid #f1f5f9;">Rs.${inv.ratePerCan}/can</td>
+                <td style="padding: 12px 14px; font-size: 13px; color: #334155; text-align: right; font-weight: 600; border-bottom: 1px solid #f1f5f9;">Rs.${inv.subtotal}</td>
+              </tr>
+              ${inv.previousBalance > 0 ? `
+              <tr>
+                <td style="padding: 12px 14px; font-size: 13px; color: #ef4444;">Previous Balance</td>
+                <td style="padding: 12px 14px;">-</td>
+                <td style="padding: 12px 14px;">-</td>
+                <td style="padding: 12px 14px; color: #ef4444; text-align: right; font-weight: 600;">Rs.${inv.previousBalance}</td>
+              </tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-left: auto; width: 260px;">
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; color: #475569; border-bottom: 1px solid #f1f5f9;">
+            <span>Subtotal</span><span>Rs.${inv.subtotal}</span>
+          </div>
+          ${inv.previousBalance > 0 ? `
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; color: #ef4444; border-bottom: 1px solid #f1f5f9;">
+            <span>Previous Balance</span><span>+Rs.${inv.previousBalance}</span>
+          </div>` : ''}
+          <div style="display: flex; justify-content: space-between; padding: 12px 14px; background: #f8fafc; border: 2px solid #1e293b; border-radius: 8px; margin-top: 10px;">
+            <span style="color: #1e293b; font-weight: 900; font-size: 16px;">Total Payable</span>
+            <span style="color: #1e293b; font-weight: 900; font-size: 16px;">Rs.${inv.totalAmount}</span>
+          </div>
+        </div>
+
+        ${inv.paid ? `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-top: 20px; display: flex; justify-content: space-between;">
+          <div>
+            <div style="font-size: 11px; color: #64748b; font-weight: 600;">Amount Paid</div>
+            <div style="font-size: 14px; font-weight: 800; color: #16a34a;">Rs.${inv.paidAmount}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 11px; color: #64748b; font-weight: 600;">Payment Date</div>
+            <div style="font-size: 14px; font-weight: 800; color: #16a34a;">${new Date(inv.paidDate).toLocaleDateString('en-IN')}</div>
+          </div>
+        </div>` : ''}
+      </div>
+
+      <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 36px; text-align: center;">
+        <div style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px;">Thank you for your business!</div>
+        <div style="font-size: 11px; color: #94a3b8;">${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
+        <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">This is a computer generated invoice.</div>
+      </div>
+
+      ${deliveryRows ? `
+      <!-- PAGE 2 - DELIVERY LOG -->
+      <div style="margin-top: 40px; page-break-before: always;">
+        <div style="background: linear-gradient(135deg, #0ea5e9, #2563eb); padding: 20px 36px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="color: white; font-size: 16px; font-weight: 800;">📦 Delivery Statement</div>
+            <div style="color: rgba(255,255,255,0.75); font-size: 11px; margin-top: 2px;">${inv.customerName} | ${months[inv.month - 1]} ${inv.year}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="color: white; font-size: 13px; font-weight: 700;">${currentUser?.tenantName || ''}</div>
+            <div style="color: rgba(255,255,255,0.75); font-size: 11px;">${inv.invoiceNo}</div>
+          </div>
+        </div>
+        <div style="padding: 20px 36px;">
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse;">
               <thead>
-                <tr style="background:#f1f5f9;">
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">#</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Date</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Delivered</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Returned</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Net</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Person</th>
-                  <th style="padding:10px 14px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Amount</th>
+                <tr style="background: #f1f5f9;">
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">#</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Date</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Delivered</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Returned</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Net</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Person</th>
+                  <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0;">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 ${deliveryRows}
               </tbody>
               <tfoot>
-                <tr class="tfoot-row">
-                  <td colspan="2" style="padding:12px 14px; font-size:13px; color:#1e293b; font-weight:700;">Total</td>
-                  <td style="padding:12px 14px; font-size:13px; color:#2563eb; font-weight:700;">${totalDelivered}</td>
-                  <td style="padding:12px 14px; font-size:13px; color:#10b981; font-weight:700;">${totalReturned}</td>
-                  <td style="padding:12px 14px; font-size:13px; color:#7c3aed; font-weight:700;">${totalNet}</td>
-                  <td style="padding:12px 14px;"></td>
-                  <td style="padding:12px 14px; font-size:13px; color:#d97706; font-weight:700;">₹${inv.subtotal}</td>
+                <tr style="background:#f1f5f9;">
+                  <td colspan="2" style="padding:10px 12px; font-size:12px; color:#1e293b; font-weight:700;">Total</td>
+                  <td style="padding:10px 12px; font-size:12px; color:#2563eb; font-weight:700;">${totalDelivered}</td>
+                  <td style="padding:10px 12px; font-size:12px; color:#10b981; font-weight:700;">${totalReturned}</td>
+                  <td style="padding:10px 12px; font-size:12px; color:#7c3aed; font-weight:700;">${totalNet}</td>
+                  <td style="padding:10px 12px;"></td>
+                  <td style="padding:10px 12px; font-size:12px; color:#d97706; font-weight:700;">Rs.${inv.subtotal}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
         </div>
-        <div class="footer">
-          <p>${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</p>
-          <p>This is a computer generated statement.</p>
+        <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px 36px; text-align: center;">
+          <div style="font-size: 11px; color: #94a3b8;">${currentUser?.tenantName || ''} | 📞 ${currentUser?.tenantPhone || ''} | ✉️ ${currentUser?.tenantEmail || ''}</div>
         </div>
       </div>` : ''}
 
-    </body>
-    </html>
+    </div>
   `;
 
-  const printArea = document.getElementById('print-area');
-  printArea.innerHTML = printContent;
-  printArea.style.display = 'block';
-  window.print();
-  printArea.style.display = 'none';
-  printArea.innerHTML = '';
+  // Create temp div
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'fixed';
+  tempDiv.style.top = '-9999px';
+  tempDiv.style.left = '-9999px';
+  tempDiv.style.width = '700px';
+  tempDiv.style.background = 'white';
+  tempDiv.innerHTML = printContent;
+  document.body.appendChild(tempDiv);
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const canvas = await html2canvas(tempDiv.querySelector('#pdf-invoice'), {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff'
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    pdf.save(`Invoice-${inv.invoiceNo}-${inv.customerName}.pdf`);
+
+    notify('Invoice downloaded successfully!');
+  } catch (err) {
+    console.error('PDF error:', err);
+    notify('Failed to generate PDF', 'error');
+  }
+
+  document.body.removeChild(tempDiv);
 };
 
   return (
