@@ -189,3 +189,35 @@ export const updateTenantAPI = async (id, data) => {
   })
   return res.json()
 }
+// ─── SUPERADMIN MANAGEMENT ────────────────────────────────────────────────────
+export const getSuperAdminsAPI = async () => {
+  const res = await fetch(`${BASE_URL}/auth/superadmins`, { headers: headers() })
+  return res.json()
+}
+
+export const addSuperAdminAPI = async (data) => {
+  const res = await fetch(`${BASE_URL}/auth/add-superadmin`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(data)
+  })
+  return res.json()
+}
+
+export const toggleSuperAdminAPI = async (id, active) => {
+  const res = await fetch(`${BASE_URL}/auth/superadmins/${id}/toggle`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify({ active })
+  })
+  return res.json()
+}
+
+export const toggleTenantUserAPI = async (id, active) => {
+  const res = await fetch(`${BASE_URL}/auth/tenant-users/${id}/toggle`, {
+    method: 'PUT',
+    headers: headers(),
+    body: JSON.stringify({ active })
+  })
+  return res.json()
+}

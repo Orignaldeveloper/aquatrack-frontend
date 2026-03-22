@@ -5,7 +5,8 @@ import {
   getTodaySummaryAPI, getDeliveriesAPI, createDeliveryAPI, deleteDeliveryAPI, updateDeliveryAPI,
   getInvoicesAPI, generateBillingAPI, markAsPaidAPI,
   getDeliveryPersonsAPI, addDeliveryPersonAPI, updateDeliveryPersonAPI, deleteDeliveryPersonAPI,
-  getTenantsAPI, createTenantAPI, toggleTenantAPI, updateTenantAPI
+  getTenantsAPI, createTenantAPI, toggleTenantAPI, updateTenantAPI,
+  getSuperAdminsAPI, addSuperAdminAPI, toggleSuperAdminAPI, toggleTenantUserAPI
 } from './api.js';
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const MOCK_USERS = [
@@ -2348,13 +2349,151 @@ function ReportsPage({ theme, darkMode, deliveries }) {
   );
 }
 
+/// ─── SUPERADMINS SECTION ──────────────────────────────────────────────────────
+function SuperAdminsSection({ theme, darkMode, notify, currentUser }) {
+  const [admins, setAdmins] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+
+  const ic = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-cyan-500 ${theme.input}`;
+
+  useEffect(() => { fetchAdmins(); }, []);
+
+  const fetchAdmins = async () => {
+    setLoading(true);
+    try {
+      const data = await getSuperAdminsAPI();
+      if (data.success) setAdmins(data.admins);
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleAdd = async () => {
+    if (!form.name || !form.email || !form.password)
+      return notify("All fields required", "error");
+    try {
+      const data = await addSuperAdminAPI(form);
+      if (data.success) {
+        notify("Superadmin created successfully!");
+        setShowForm(false);
+        setForm({ name: '', email: '', password: '' });
+        fetchAdmins();
+      } else {
+        notify(data.message || "Failed", "error");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  const handleToggle = async (id, currentActive) => {
+    if (id === currentUser?.id) return notify("You cannot deactivate yourself!", "error");
+    try {
+      const data = await toggleSuperAdminAPI(id, !currentActive);
+      if (data.success) {
+        setAdmins(prev => prev.map(a => a._id === id ? { ...a, active: !currentActive } : a));
+        notify(`Superadmin ${!currentActive ? 'activated' : 'deactivated'}!`);
+      } else {
+        notify(data.message || "Failed", "error");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-bold text-base">Super Admins</h2>
+          <p className={`text-xs ${theme.subtext}`}>{admins.length} total</p>
+        </div>
+        <button onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
+          <Icon name="plus" size={15} /> Add Superadmin
+        </button>
+      </div>
+
+      {showForm && (
+        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+          <h3 className="text-sm font-semibold mb-4">Create New Superadmin</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Full Name *</label>
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={ic} placeholder="Enter name" />
+            </div>
+            <div>
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Email *</label>
+              <input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className={ic} placeholder="Enter email" autoComplete="new-email" />
+            </div>
+            <div className="col-span-2">
+              <label className={`text-xs ${theme.subtext} mb-1 block`}>Password *</label>
+              <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} className={ic} placeholder="Min 6 characters" autoComplete="new-password" />
+            </div>
+          </div>
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setShowForm(false)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+            <button onClick={handleAdd} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Create Superadmin</button>
+          </div>
+        </div>
+      )}
+
+      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading...</div>}
+
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {admins.map(a => (
+            <div key={a._id} className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
+                    {a.name[0]}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm">{a.name}</div>
+                    <div className={`text-xs ${theme.subtext}`}>{a.email}</div>
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${a.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-500/10 text-gray-500"}`}>
+                  {a.active ? "Active" : "Inactive"}
+                </span>
+              </div>
+              {a._id === currentUser?.id && (
+                <div className="mb-3 px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-600 text-xs font-semibold text-center">
+                  👤 You
+                </div>
+              )}
+              <button
+                onClick={() => handleToggle(a._id, a.active)}
+                disabled={a._id === currentUser?.id}
+                className={`w-full py-2 rounded-xl text-xs font-semibold border transition-colors
+                  ${a._id === currentUser?.id
+                    ? "opacity-40 cursor-not-allowed border-gray-300 text-gray-400"
+                    : a.active
+                      ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                      : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+                {a._id === currentUser?.id ? "Cannot modify yourself" : a.active ? "Deactivate" : "Activate"}
+              </button>
+            </div>
+          ))}
+          {admins.length === 0 && (
+            <div className={`col-span-3 text-center py-16 ${theme.subtext}`}>
+              <div className="text-4xl mb-3">👑</div>
+              <div className="text-sm font-medium mb-1">No superadmins yet</div>
+              <div className="text-xs">Click "Add Superadmin" to create one</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── TENANTS (Superadmin) ──────────────────────────────────────────────────────
 function TenantsPage({ theme, darkMode, notify, user, setUser }) {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-const [editTenant, setEditTenant] = useState(null);
-const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', plan: 'basic' });
+  const [activeSection, setActiveSection] = useState('tenants');
+  const [editTenant, setEditTenant] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', plan: 'basic' });
   const [form, setForm] = useState({
     tenantName: '', tenantEmail: '', tenantPhone: '',
     adminName: '', adminEmail: '', adminPassword: '', plan: 'basic'
@@ -2398,219 +2537,231 @@ const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', pla
       }
     } catch { notify("Server error", "error"); }
   };
-  const openEdit = (t) => {
-  setEditTenant(t);
-  setEditForm({ name: t.name, phone: t.phone || '', address: t.address || '', plan: t.plan });
-  setShowForm(false);
-};
 
-const handleUpdateTenant = async () => {
-  try {
-    const data = await updateTenantAPI(editTenant._id, editForm);
-   if (data.success) {
-  setTenants(prev => prev.map(t => t._id === editTenant._id ? { ...t, ...editForm } : t));
-  notify("Tenant updated successfully!");
-  setEditTenant(null);
-  // Update localStorage so print reflects new details
-  const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const updatedUser = {
-    ...savedUser,
-    tenantName: editForm.name,
-    tenantPhone: editForm.phone,
-    tenantAddress: editForm.address,
+  const openEdit = (t) => {
+    setEditTenant(t);
+    setEditForm({ name: t.name, phone: t.phone || '', address: t.address || '', plan: t.plan });
+    setShowForm(false);
   };
-  localStorage.setItem('user', JSON.stringify(updatedUser));
-  if (setUser) setUser(updatedUser);
-}
-    else {
-      notify(data.message || "Failed", "error");
-    }
-  } catch { notify("Server error", "error"); }
-};
+
+  const handleUpdateTenant = async () => {
+    try {
+      const data = await updateTenantAPI(editTenant._id, editForm);
+      if (data.success) {
+        setTenants(prev => prev.map(t => t._id === editTenant._id ? { ...t, ...editForm } : t));
+        notify("Tenant updated successfully!");
+        setEditTenant(null);
+        const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const updatedUser = {
+          ...savedUser,
+          tenantName: editForm.name,
+          tenantPhone: editForm.phone,
+          tenantAddress: editForm.address,
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        if (setUser) setUser(updatedUser);
+      } else {
+        notify(data.message || "Failed", "error");
+      }
+    } catch { notify("Server error", "error"); }
+  };
+
   const activeTenants = tenants.filter(t => t.active).length;
 
   return (
     <div className="p-6 space-y-5">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-bold text-base">All Tenants</h2>
-          <p className={`text-xs ${theme.subtext}`}>{tenants.length} total • {activeTenants} active</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
-          <Icon name="plus" size={15} /> New Tenant
-        </button>
-      </div>
-
-      {/* Create Form */}
-      {showForm && (
-        <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
-          <h3 className="text-sm font-semibold mb-4">Create New Tenant</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name *</label>
-              <input value={form.tenantName} onChange={e => setForm(p => ({ ...p, tenantName: e.target.value }))} className={ic} placeholder="AquaFresh Distributors" />
-            </div>
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Email</label>
-              <input value={form.tenantEmail} onChange={e => setForm(p => ({ ...p, tenantEmail: e.target.value }))} className={ic} placeholder="business@email.com" />
-            </div>
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
-              <input value={form.tenantPhone} onChange={e => setForm(p => ({ ...p, tenantPhone: e.target.value }))} className={ic} placeholder="9876543210" />
-            </div>
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
-              <select value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))} className={ic}>
-                <option value="basic">Basic</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
-              </select>
-            </div>
-            <div className={`col-span-2 border-t pt-3 ${darkMode ? "border-gray-700" : "border-gray-100"}`}>
-              <p className={`text-xs font-semibold ${theme.subtext} mb-3`}>Admin Account</p>
-            </div>
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Name</label>
-              <input value={form.adminName} onChange={e => setForm(p => ({ ...p, adminName: e.target.value }))} className={ic} placeholder="Admin Name" />
-            </div>
-            <div>
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Email *</label>
-              <input value={form.adminEmail} onChange={e => setForm(p => ({ ...p, adminEmail: e.target.value }))} className={ic} placeholder="admin@business.com" autoComplete="new-email" />
-            </div>
-            <div className="col-span-2">
-              <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Password *</label>
-              <input type="password" value={form.adminPassword} onChange={e => setForm(p => ({ ...p, adminPassword: e.target.value }))} className={ic} placeholder="Min 6 characters" autoComplete="new-password" />
-            </div>
-          </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={() => setShowForm(false)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
-            <button onClick={handleCreate} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Create Tenant</button>
-          </div>
-        </div>
-      )}
-      
-      {/* Edit Form */}
-{editTenant && (
-  <div className={`${theme.card} border rounded-2xl p-5 shadow-sm border-blue-500/30`}>
-    <h3 className="text-sm font-semibold mb-4">Edit — {editTenant.name}</h3>
-    <div className="grid grid-cols-2 gap-3">
-      <div>
-        <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name</label>
-        <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-          className={ic} placeholder="Business Name" />
-      </div>
-      <div>
-        <label className={`text-xs ${theme.subtext} mb-1 block`}>Email (readonly)</label>
-        <input value={editTenant.email} readOnly
-          className={`${ic} opacity-50 cursor-not-allowed`} />
-      </div>
-      <div>
-        <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
-        <input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
-          className={ic} placeholder="Phone" />
-      </div>
-      <div>
-        <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
-        <select value={editForm.plan} onChange={e => setEditForm(p => ({ ...p, plan: e.target.value }))}
-          className={ic}>
-          <option value="basic">Basic</option>
-          <option value="pro">Pro</option>
-          <option value="enterprise">Enterprise</option>
-        </select>
-      </div>
-      <div className="col-span-2">
-        <label className={`text-xs ${theme.subtext} mb-1 block`}>Address</label>
-        <input value={editForm.address} onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))}
-          className={ic} placeholder="Business Address" />
-      </div>
-    </div>
-    <div className="flex gap-3 mt-4">
-      <button onClick={() => setEditTenant(null)}
-        className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
-      <button onClick={handleUpdateTenant}
-        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">
-        Save Changes
-      </button>
-    </div>
-  </div>
-)}
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total Tenants", value: tenants.length, color: "from-blue-500 to-cyan-500" },
-          { label: "Active", value: activeTenants, color: "from-emerald-500 to-teal-500" },
-          { label: "Inactive", value: tenants.length - activeTenants, color: "from-rose-500 to-red-500" },
-          { label: "Total Customers", value: tenants.reduce((s, t) => s + (t.customerCount || 0), 0), color: "from-violet-500 to-purple-500" },
-        ].map((s, i) => (
-          <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-2`}>
-              <Icon name="reports" size={14} className="text-white" />
-            </div>
-            <div className="text-2xl font-bold">{s.value}</div>
-            <div className={`text-xs ${theme.subtext} mt-0.5`}>{s.label}</div>
-          </div>
+      {/* Section Tabs */}
+      <div className={`flex rounded-xl border overflow-hidden w-fit ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+        {["tenants", "superadmins"].map(section => (
+          <button key={section} onClick={() => setActiveSection(section)}
+            className={`px-5 py-2 text-xs font-semibold capitalize transition-colors
+              ${activeSection === section
+                ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                : `${theme.subtext} ${theme.hover}`}`}>
+            {section === 'tenants' ? '🏢 Tenants' : '👑 Super Admins'}
+          </button>
         ))}
       </div>
 
-      {/* Loading */}
-      {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading tenants...</div>}
+      {/* SuperAdmins Section */}
+      {activeSection === 'superadmins' && <SuperAdminsSection theme={theme} darkMode={darkMode} notify={notify} currentUser={user} />}
 
-      {/* Tenant Cards */}
-      {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {tenants.map(t => (
-            <div key={t._id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
-                  <Icon name="droplet" size={20} className="text-white" />
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-400/10 text-gray-500"}`}>
-                  {t.active ? "Active" : "Inactive"}
-                </span>
+      {/* Tenants Section */}
+      {activeSection === 'tenants' && <div className="space-y-5">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-base">All Tenants</h2>
+            <p className={`text-xs ${theme.subtext}`}>{tenants.length} total • {activeTenants} active</p>
+          </div>
+          <button onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-medium shadow-md hover:opacity-90">
+            <Icon name="plus" size={15} /> New Tenant
+          </button>
+        </div>
+
+        {/* Create Form */}
+        {showForm && (
+          <div className={`${theme.card} border rounded-2xl p-5 shadow-sm`}>
+            <h3 className="text-sm font-semibold mb-4">Create New Tenant</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name *</label>
+                <input value={form.tenantName} onChange={e => setForm(p => ({ ...p, tenantName: e.target.value }))} className={ic} placeholder="AquaFresh Distributors" />
               </div>
-              <h3 className="font-bold text-sm mb-1">{t.name}</h3>
-              <div className={`text-xs ${theme.subtext} capitalize mb-1`}>{t.plan} plan</div>
-              <div className={`text-xs ${theme.subtext} mb-4`}>
-                👤 {t.adminName || 'No admin'} • {t.adminEmail || ''}
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Email</label>
+                <input value={form.tenantEmail} onChange={e => setForm(p => ({ ...p, tenantEmail: e.target.value }))} className={ic} placeholder="business@email.com" />
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
-                  <div className="text-lg font-bold">{t.customerCount || 0}</div>
-                  <div className={`text-xs ${theme.subtext}`}>Customers</div>
-                </div>
-                <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
-                  <div className={`text-xs ${theme.subtext} mt-1`}>{new Date(t.createdAt).toLocaleDateString('en-IN')}</div>
-                  <div className={`text-xs ${theme.subtext}`}>Created</div>
-                </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
+                <input value={form.tenantPhone} onChange={e => setForm(p => ({ ...p, tenantPhone: e.target.value }))} className={ic} placeholder="9876543210" />
               </div>
-    <div className="flex gap-2">
-  <button onClick={() => openEdit(t)}
-    className="flex-1 py-2 rounded-xl text-xs font-semibold border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors">
-    Edit
-  </button>
-  <button onClick={() => handleToggle(t._id, t.active)}
-    className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors
-      ${t.active
-        ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
-        : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
-    {t.active ? "Deactivate" : "Activate"}
-  </button>
-</div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
+                <select value={form.plan} onChange={e => setForm(p => ({ ...p, plan: e.target.value }))} className={ic}>
+                  <option value="basic">Basic</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <div className={`col-span-2 border-t pt-3 ${darkMode ? "border-gray-700" : "border-gray-100"}`}>
+                <p className={`text-xs font-semibold ${theme.subtext} mb-3`}>Admin Account</p>
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Name</label>
+                <input value={form.adminName} onChange={e => setForm(p => ({ ...p, adminName: e.target.value }))} className={ic} placeholder="Admin Name" />
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Email *</label>
+                <input value={form.adminEmail} onChange={e => setForm(p => ({ ...p, adminEmail: e.target.value }))} className={ic} placeholder="admin@business.com" autoComplete="new-email" />
+              </div>
+              <div className="col-span-2">
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Admin Password *</label>
+                <input type="password" value={form.adminPassword} onChange={e => setForm(p => ({ ...p, adminPassword: e.target.value }))} className={ic} placeholder="Min 6 characters" autoComplete="new-password" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setShowForm(false)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+              <button onClick={handleCreate} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Create Tenant</button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Form */}
+        {editTenant && (
+          <div className={`${theme.card} border rounded-2xl p-5 shadow-sm border-blue-500/30`}>
+            <h3 className="text-sm font-semibold mb-4">Edit — {editTenant.name}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Business Name</label>
+                <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} className={ic} placeholder="Business Name" />
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Email (readonly)</label>
+                <input value={editTenant.email} readOnly className={`${ic} opacity-50 cursor-not-allowed`} />
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Phone</label>
+                <input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} className={ic} placeholder="Phone" />
+              </div>
+              <div>
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Plan</label>
+                <select value={editForm.plan} onChange={e => setEditForm(p => ({ ...p, plan: e.target.value }))} className={ic}>
+                  <option value="basic">Basic</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className={`text-xs ${theme.subtext} mb-1 block`}>Address</label>
+                <input value={editForm.address} onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))} className={ic} placeholder="Business Address" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setEditTenant(null)} className={`flex-1 py-2.5 rounded-xl border text-sm ${theme.input}`}>Cancel</button>
+              <button onClick={handleUpdateTenant} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm font-semibold">Save Changes</button>
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Total Tenants", value: tenants.length, color: "from-blue-500 to-cyan-500" },
+            { label: "Active", value: activeTenants, color: "from-emerald-500 to-teal-500" },
+            { label: "Inactive", value: tenants.length - activeTenants, color: "from-rose-500 to-red-500" },
+            { label: "Total Customers", value: tenants.reduce((s, t) => s + (t.customerCount || 0), 0), color: "from-violet-500 to-purple-500" },
+          ].map((s, i) => (
+            <div key={i} className={`${theme.card} border rounded-2xl p-4 shadow-sm`}>
+              <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center mb-2`}>
+                <Icon name="reports" size={14} className="text-white" />
+              </div>
+              <div className="text-2xl font-bold">{s.value}</div>
+              <div className={`text-xs ${theme.subtext} mt-0.5`}>{s.label}</div>
             </div>
           ))}
-          {tenants.length === 0 && (
-            <div className={`col-span-3 text-center py-16 ${theme.subtext}`}>
-              <div className="text-4xl mb-3">🏢</div>
-              <div className="text-sm font-medium mb-1">No tenants yet</div>
-              <div className="text-xs">Click "New Tenant" to create your first tenant</div>
-            </div>
-          )}
         </div>
-      )}
+
+        {/* Loading */}
+        {loading && <div className="text-center py-10 text-cyan-500 text-sm">Loading tenants...</div>}
+
+        {/* Tenant Cards */}
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {tenants.map(t => (
+              <div key={t._id} className={`${theme.card} border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow`}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                    <Icon name="droplet" size={20} className="text-white" />
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${t.active ? "bg-emerald-500/10 text-emerald-600" : "bg-gray-400/10 text-gray-500"}`}>
+                    {t.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm mb-1">{t.name}</h3>
+                <div className={`text-xs ${theme.subtext} capitalize mb-1`}>{t.plan} plan</div>
+                <div className={`text-xs ${theme.subtext} mb-4`}>
+                  👤 {t.adminName || 'No admin'} • {t.adminEmail || ''}
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                    <div className="text-lg font-bold">{t.customerCount || 0}</div>
+                    <div className={`text-xs ${theme.subtext}`}>Customers</div>
+                  </div>
+                  <div className={`rounded-xl p-2.5 ${darkMode ? "bg-gray-800" : "bg-slate-50"}`}>
+                    <div className={`text-xs ${theme.subtext} mt-1`}>{new Date(t.createdAt).toLocaleDateString('en-IN')}</div>
+                    <div className={`text-xs ${theme.subtext}`}>Created</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(t)}
+                    className="flex-1 py-2 rounded-xl text-xs font-semibold border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 transition-colors">
+                    Edit
+                  </button>
+                  <button onClick={() => handleToggle(t._id, t.active)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors
+                      ${t.active
+                        ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        : "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"}`}>
+                    {t.active ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {tenants.length === 0 && (
+              <div className={`col-span-3 text-center py-16 ${theme.subtext}`}>
+                <div className="text-4xl mb-3">🏢</div>
+                <div className="text-sm font-medium mb-1">No tenants yet</div>
+                <div className="text-xs">Click "New Tenant" to create your first tenant</div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>}
     </div>
- );
+  );
 }
